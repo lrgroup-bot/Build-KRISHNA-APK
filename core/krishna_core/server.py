@@ -14,7 +14,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(404,{"error":"not found"})
     def do_POST(self):
         n=int(self.headers.get("Content-Length","0")); data=json.loads(self.rfile.read(n) or b"{}")
-        if self.path=="/v1/chat":
+        if self.path in ("/v1/chat","/api/core/chat"):
             try: return self._json(200,orch.handle(data.get("message",""),data.get("project","general")))
             except Exception as e: return self._json(500,{"error":str(e)})
         return self._json(404,{"error":"not found"})
