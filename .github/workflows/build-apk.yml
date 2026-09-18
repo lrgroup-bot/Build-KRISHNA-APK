@@ -1,70 +1,44 @@
 name: Build KRISHNA APK
-on:
-  workflow_dispatch:
-  push:
-    branches: [main]
-permissions:
-  contents: read
+on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v5
-        with: { distribution: temurin, java-version: '17' }
+        with: {distribution: temurin, java-version: '17'}
       - uses: gradle/actions/setup-gradle@v4
-        with: { gradle-version: '8.9' }
-      - name: Build KRISHNA minimal 3D APK
-        shell: bash
+        with: {gradle-version: '8.9'}
+      - name: Build
         run: |
-          mkdir -p app/src/main/java/com/krishna/mobile app/src/main/res/{values,xml,drawable,raw}
+          mkdir -p app/src/main/java/com/krishna/mobile app/src/main/res/{values,drawable,xml,raw}
           cat > settings.gradle <<'EOF'
-          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-          rootProject.name='KrishnaMobile'; include ':app'
+          pluginManagement { repositories { google();mavenCentral();gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google();mavenCentral() } }
+          rootProject.name='Krishna';include ':app'
           EOF
           echo "plugins { id 'com.android.application' version '8.7.3' apply false }" > build.gradle
-          printf 'org.gradle.jvmargs=-Xmx2048m
-android.useAndroidX=true
-' > gradle.properties
+          echo 'org.gradle.jvmargs=-Xmx2048m' > gradle.properties
           cat > app/build.gradle <<'EOF'
           plugins { id 'com.android.application' }
           android { namespace 'com.krishna.mobile'; compileSdk 35
-            defaultConfig { applicationId 'com.krishna.mobile'; minSdk 26; targetSdk 35; versionCode 5; versionName '1.4.0' }
-          }
+          defaultConfig { applicationId 'com.krishna.mobile'; minSdk 26; targetSdk 35; versionCode 7; versionName '1.4.2' } }
           EOF
-          cat > app/src/main/res/values/strings.xml <<'EOF'
-          <resources><string name="app_name">KRISHNA</string><style name="AppTheme" parent="android:style/Theme.Material.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">#25D9FF</item><item name="android:statusBarColor">#02070d</item><item name="android:navigationBarColor">#02070d</item></style></resources>
-          EOF
-          cat > app/src/main/res/xml/network_security_config.xml <<'EOF'
-          <network-security-config><base-config cleartextTrafficPermitted="false"><trust-anchors><certificates src="system"/><certificates src="user"/><certificates src="@raw/krishna_ca"/></trust-anchors></base-config></network-security-config>
-          EOF
-          cat > app/src/main/res/drawable/ic_krishna.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#02070d" android:pathData="M0,0h108v108h-108z"/><path android:strokeColor="#25D9FF" android:strokeWidth="4" android:fillColor="@android:color/transparent" android:pathData="M30,20v68M31,54L77,21M31,54L77,87"/></vector>
-          EOF
+          echo '<resources><string name="app_name">KRISHNA</string><style name="AppTheme" parent="android:style/Theme.Material.NoActionBar"/></resources>' > app/src/main/res/values/styles.xml
+          echo '<shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#06182A"/><corners android:radius="24dp"/><stroke android:width="2dp" android:color="#00C8FF"/></shape>' > app/src/main/res/drawable/field.xml
+          echo '<network-security-config><base-config><trust-anchors><certificates src="system"/><certificates src="user"/><certificates src="@raw/krishna_ca"/></trust-anchors></base-config></network-security-config>' > app/src/main/res/xml/network_security_config.xml
+          cp app/src/main/res/raw/krishna-ca.cer app/src/main/res/raw/krishna_ca.cer
           cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.RECORD_AUDIO"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/><uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><application android:theme="@style/AppTheme" android:label="KRISHNA" android:icon="@drawable/ic_krishna" android:networkSecurityConfig="@xml/network_security_config"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity><service android:name=".VoiceService" android:foregroundServiceType="microphone" android:exported="false"/></application></manifest>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.RECORD_AUDIO"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/><application android:theme="@style/AppTheme" android:label="KRISHNA" android:networkSecurityConfig="@xml/network_security_config"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity><service android:name=".VoiceService" android:foregroundServiceType="microphone"/></application></manifest>
           EOF
           cat > app/src/main/java/com/krishna/mobile/MainActivity.java <<'EOF'
-          package com.krishna.mobile;
-          import android.app.*;import android.os.*;import android.content.*;import android.content.pm.PackageManager;import android.graphics.*;import android.graphics.drawable.*;import android.view.*;import android.widget.*;
-          public class MainActivity extends Activity{
-          int d(int n){return(int)(n*getResources().getDisplayMetrics().density+.5f);} GradientDrawable bg(int c,int s){GradientDrawable g=new GradientDrawable();g.setColor(c);g.setCornerRadius(d(22));g.setStroke(d(1),Color.rgb(37,217,255));return g;}
-          void voice(){if(Build.VERSION.SDK_INT>=23&&checkSelfPermission("android.permission.RECORD_AUDIO")!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{"android.permission.RECORD_AUDIO","android.permission.POST_NOTIFICATIONS"},7);return;}startForegroundService(new Intent(this,VoiceService.class));}
-          public void onRequestPermissionsResult(int r,String[]p,int[]g){super.onRequestPermissionsResult(r,p,g);if(r==7&&g.length>0&&g[0]==0)voice();}
-          public void onCreate(Bundle b){super.onCreate(b);LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setGravity(Gravity.CENTER_HORIZONTAL);l.setPadding(d(24),d(48),d(24),d(32));l.setBackgroundColor(Color.rgb(2,7,13));TextView h=new TextView(this);h.setText("KRISHNA");h.setTextSize(32);h.setLetterSpacing(.18f);h.setTextColor(Color.rgb(37,217,255));h.setGravity(17);l.addView(h,new LinearLayout.LayoutParams(-1,d(64)));TextView s=new TextView(this);s.setText("YOUR PC · WITHIN REACH");s.setTextSize(12);s.setTextColor(Color.rgb(130,190,205));s.setGravity(17);l.addView(s,new LinearLayout.LayoutParams(-1,d(44)));Space sp=new Space(this);l.addView(sp,new LinearLayout.LayoutParams(1,0,1));EditText e=new EditText(this);e.setHint("Talk to KRISHNA");e.setHintTextColor(Color.rgb(140,190,205));e.setTextColor(Color.WHITE);e.setTextSize(18);e.setMinLines(4);e.setGravity(48);e.setPadding(d(22),d(20),d(22),d(20));e.setBackground(bg(Color.rgb(4,22,34),22));l.addView(e,new LinearLayout.LayoutParams(-1,-2));TextView n=new TextView(this);n.setText("SAY  ‘KRISHNA UTHA’  TO WAKE");n.setTextSize(11);n.setLetterSpacing(.08f);n.setTextColor(Color.rgb(100,220,255));n.setGravity(17);LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(-1,d(58));q.topMargin=d(18);l.addView(n,q);setContentView(l);voice();}}
+          package com.krishna.mobile; import android.app.*;import android.os.*;import android.content.*;import android.graphics.*;import android.view.*;import android.widget.*;public class MainActivity extends Activity{public void onCreate(Bundle b){super.onCreate(b);LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(36,100,36,36);l.setGravity(1);l.setBackgroundColor(Color.rgb(2,10,20));TextView t=new TextView(this);t.setText("KRISHNA");t.setTextSize(42);t.setTextColor(Color.CYAN);t.setGravity(17);l.addView(t);TextView s=new TextView(this);s.setText("YOUR PC · WITHIN REACH");s.setTextColor(Color.LTGRAY);s.setGravity(17);l.addView(s);Space p=new Space(this);l.addView(p,new LinearLayout.LayoutParams(1,0,1));EditText e=new EditText(this);e.setHint("Talk to KRISHNA");e.setTextColor(Color.WHITE);e.setHintTextColor(Color.LTGRAY);e.setTextSize(18);e.setBackgroundResource(R.drawable.field);l.addView(e,new LinearLayout.LayoutParams(-1,-2));TextView w=new TextView(this);w.setText("SAY KRISHNA UTHA TO WAKE");w.setTextColor(Color.CYAN);w.setGravity(17);l.addView(w);setContentView(l);startForegroundService(new Intent(this,VoiceService.class));}}
           EOF
           cat > app/src/main/java/com/krishna/mobile/VoiceService.java <<'EOF'
-          package com.krishna.mobile;
-          import android.app.*;import android.content.*;import android.os.*;import android.speech.*;import java.util.*;
-          public class VoiceService extends Service implements RecognitionListener{SpeechRecognizer r;Handler h=new Handler();public IBinder onBind(Intent i){return null;}public int onStartCommand(Intent i,int f,int id){NotificationChannel c=new NotificationChannel("krishna_voice","KRISHNA listening",NotificationManager.IMPORTANCE_LOW);getSystemService(NotificationManager.class).createNotificationChannel(c);startForeground(11,new Notification.Builder(this,"krishna_voice").setSmallIcon(com.krishna.mobile.R.drawable.ic_krishna).setContentTitle("KRISHNA listening").setContentText("Say Krishna utha").build());listen();return START_STICKY;}void listen(){if(r!=null)r.destroy();r=SpeechRecognizer.createSpeechRecognizer(this);r.setRecognitionListener(this);Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"or-IN");i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,"or-IN");i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);r.startListening(i);}void again(){h.postDelayed(()->listen(),700);}public void onResults(Bundle b){ArrayList<String>x=b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);if(x!=null)for(String s:x)if(s.toLowerCase().contains("krishna utha")){Intent i=new Intent(this,MainActivity.class);i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);startActivity(i);}again();}public void onError(int e){again();}public void onReadyForSpeech(Bundle b){}public void onBeginningOfSpeech(){}public void onRmsChanged(float f){}public void onBufferReceived(byte[]b){}public void onEndOfSpeech(){}public void onPartialResults(Bundle b){}public void onEvent(int a,Bundle b){}public void onDestroy(){if(r!=null)r.destroy();super.onDestroy();}}
+          package com.krishna.mobile;import android.app.*;import android.content.*;import android.os.*;import android.speech.*;import java.util.*;public class VoiceService extends Service implements RecognitionListener{SpeechRecognizer r;Handler h=new Handler();public IBinder onBind(Intent i){return null;}public int onStartCommand(Intent i,int f,int id){NotificationChannel c=new NotificationChannel("k","KRISHNA",NotificationManager.IMPORTANCE_LOW);((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(c);startForeground(8,new Notification.Builder(this,"k").setContentTitle("KRISHNA listening").setSmallIcon(android.R.drawable.ic_btn_speak_now).build());r=SpeechRecognizer.createSpeechRecognizer(this);r.setRecognitionListener(this);go();return START_STICKY;}void go(){Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"or-IN");r.startListening(i);}public void onResults(Bundle b){ArrayList<String>x=b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);if(x!=null)for(String q:x)if(q.toLowerCase().contains("krishna utha")){Intent a=new Intent(this,MainActivity.class);a.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(a);}h.postDelayed(()->go(),700);}public void onError(int e){h.postDelayed(()->go(),1000);}public void onReadyForSpeech(Bundle b){}public void onBeginningOfSpeech(){}public void onRmsChanged(float f){}public void onBufferReceived(byte[]b){}public void onEndOfSpeech(){}public void onPartialResults(Bundle b){}public void onEvent(int a,Bundle b){}}
           EOF
-          test -f app/src/main/res/raw/krishna-ca.cer
-          cp app/src/main/res/raw/krishna-ca.cer app/src/main/res/raw/krishna_ca.cer
-          test -f app/src/main/res/raw/krishna_ca.cer
-          gradle :app:assembleDebug --no-daemon
+          gradle :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: KRISHNA-Minimal-3D-Voice-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
