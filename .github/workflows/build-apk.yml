@@ -1,100 +1,70 @@
 name: Build KRISHNA APK
-
 on:
   workflow_dispatch:
   push:
     branches: [main]
-
 permissions:
   contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
+        with: { distribution: temurin, java-version: '17' }
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-      - name: Create KRISHNA Android app
+        with: { gradle-version: '8.9' }
+      - name: Build KRISHNA minimal 3D APK
         shell: bash
         run: |
-          mkdir -p app/src/main/java/com/krishna/mobile app/src/main/res/values app/src/main/res/xml app/src/main/res/drawable
+          mkdir -p app/src/main/java/com/krishna/mobile app/src/main/res/{values,xml,drawable,raw}
           cat > settings.gradle <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-          rootProject.name = 'KrishnaMobile'
-          include ':app'
+          rootProject.name='KrishnaMobile'; include ':app'
           EOF
-          cat > build.gradle <<'EOF'
-          plugins { id 'com.android.application' version '8.7.3' apply false }
-          EOF
-          cat > gradle.properties <<'EOF'
-          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          EOF
+          echo "plugins { id 'com.android.application' version '8.7.3' apply false }" > build.gradle
+          printf 'org.gradle.jvmargs=-Xmx2048m
+android.useAndroidX=true
+' > gradle.properties
           cat > app/build.gradle <<'EOF'
           plugins { id 'com.android.application' }
           android { namespace 'com.krishna.mobile'; compileSdk 35
-                    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-            defaultConfig { applicationId 'com.krishna.mobile'; minSdk 26; targetSdk 35; versionCode 3; versionName '1.2.0' }
+            defaultConfig { applicationId 'com.krishna.mobile'; minSdk 26; targetSdk 35; versionCode 5; versionName '1.4.0' }
           }
           EOF
           cat > app/src/main/res/values/strings.xml <<'EOF'
-          <resources><string name="app_name">KRISHNA</string><style name="AppTheme" parent="android:style/Theme.Material.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">#A8FF3E</item><item name="android:windowLightStatusBar">false</item><item name="android:navigationBarColor">#06100A</item><item name="android:statusBarColor">#06100A</item></style></resources>
+          <resources><string name="app_name">KRISHNA</string><style name="AppTheme" parent="android:style/Theme.Material.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">#25D9FF</item><item name="android:statusBarColor">#02070d</item><item name="android:navigationBarColor">#02070d</item></style></resources>
           EOF
           cat > app/src/main/res/xml/network_security_config.xml <<'EOF'
-          <network-security-config><base-config cleartextTrafficPermitted="false"><trust-anchors><certificates src="system"/><certificates src="user"/></trust-anchors></base-config></network-security-config>
+          <network-security-config><base-config cleartextTrafficPermitted="false"><trust-anchors><certificates src="system"/><certificates src="user"/><certificates src="@raw/krishna_ca"/></trust-anchors></base-config></network-security-config>
           EOF
           cat > app/src/main/res/drawable/ic_krishna.xml <<'EOF'
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#07120A" android:pathData="M0,0h108v108h-108z"/><path android:strokeColor="#A8FF3E" android:strokeWidth="4" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="@android:color/transparent" android:pathData="M28,21v66M29,53L74,22M31,54L76,87"/><path android:fillColor="#A8FF3E" android:pathData="M73,20a7,7 0,1 0,0.1 0"/></vector>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#02070d" android:pathData="M0,0h108v108h-108z"/><path android:strokeColor="#25D9FF" android:strokeWidth="4" android:fillColor="@android:color/transparent" android:pathData="M30,20v68M31,54L77,21M31,54L77,87"/></vector>
           EOF
           cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><application android:theme="@style/AppTheme" android:label="KRISHNA" android:icon="@drawable/ic_krishna" android:networkSecurityConfig="@xml/network_security_config" android:usesCleartextTraffic="false"><activity android:name=".MainActivity" android:screenOrientation="portrait" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.RECORD_AUDIO"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/><uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><application android:theme="@style/AppTheme" android:label="KRISHNA" android:icon="@drawable/ic_krishna" android:networkSecurityConfig="@xml/network_security_config"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity><service android:name=".VoiceService" android:foregroundServiceType="microphone" android:exported="false"/></application></manifest>
           EOF
           cat > app/src/main/java/com/krishna/mobile/MainActivity.java <<'EOF'
           package com.krishna.mobile;
-
-          import android.annotation.SuppressLint;
-          import android.app.Activity;
-          import android.graphics.Color;
-          import android.net.http.SslError;
-          import android.os.Bundle;
-          import android.view.ViewGroup;
-          import android.webkit.JavascriptInterface;
-          import android.webkit.SslErrorHandler;
-          import android.webkit.WebResourceError;
-          import android.webkit.WebResourceRequest;
-          import android.webkit.WebView;
-          import android.webkit.WebViewClient;
-          import android.widget.Toast;
-
-          public class MainActivity extends Activity {
-            private WebView panel;
-            private static final String HOME = """
-            <!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no'>
-            <style>
-            *{box-sizing:border-box}body{margin:0;min-height:100vh;overflow:hidden;background:radial-gradient(circle at 50% 38%,#173b23 0,#08140d 36%,#020604 75%);color:#eaffdf;font-family:Arial,sans-serif;letter-spacing:.08em}.grid{position:fixed;inset:0;background-image:linear-gradient(#a8ff3e12 1px,transparent 1px),linear-gradient(90deg,#a8ff3e12 1px,transparent 1px);background-size:28px 28px;transform:perspective(400px) rotateX(58deg) scale(1.8) translateY(28%);opacity:.55}.top{position:relative;text-align:center;padding:38px 20px 4px}.top small{color:#a8ff3e;font-size:10px}.top h1{font-size:29px;margin:9px 0 0;letter-spacing:.26em;text-shadow:0 0 18px #a8ff3e}.core{position:relative;width:245px;height:245px;margin:27px auto 20px;display:grid;place-items:center;filter:drop-shadow(0 0 18px #86ff36)}.ring{position:absolute;border:2px solid #a8ff3e;border-radius:50%;box-shadow:0 0 16px #7aff2a, inset 0 0 18px #69d822}.r1{width:230px;height:230px;border-style:dashed;animation:spin 10s linear infinite}.r2{width:177px;height:177px;border-color:#d8ffac66;animation:spin 6s linear infinite reverse}.r3{width:111px;height:111px;animation:pulse 2s ease-in-out infinite}.dot{width:42px;height:42px;border-radius:50%;background:#c7ff82;box-shadow:0 0 28px 12px #a8ff3e;color:#10250b;display:grid;place-items:center;font-weight:bold;font-size:25px}@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{50%{transform:scale(.75);opacity:.45}}.state{position:relative;text-align:center;font-size:11px;color:#baff7c;margin:3px auto 22px;padding:8px;border-top:1px solid #a8ff3e55;border-bottom:1px solid #a8ff3e55;width:82%}.card{position:relative;margin:0 22px;padding:16px;border:1px solid #a8ff3e88;background:#06140bcc;box-shadow:0 0 25px #8cff261f}.card label{font-size:10px;color:#baff7c}.card input{margin:9px 0 12px;width:100%;background:#020704;border:1px solid #a8ff3e88;color:#eaffdf;padding:13px;font-size:12px;outline:none}.card button{width:100%;border:0;background:#a8ff3e;color:#07120a;font-weight:bold;letter-spacing:.16em;padding:14px}.hint{position:relative;text-align:center;font-size:10px;line-height:1.6;color:#b7cab4;padding:15px 30px}.footer{position:relative;text-align:center;color:#78a56b;font-size:9px;margin-top:2px}.scan{position:absolute;inset:0;background:linear-gradient(transparent 49%,#c8ff7b15 50%,transparent 51%);background-size:100% 6px;pointer-events:none}
-            </style></head><body><div class='grid'></div><div class='scan'></div><div class='top'><small>AUTONOMOUS ASSISTANT INTERFACE</small><h1>KRISHNA</h1></div><div class='core'><div class='ring r1'></div><div class='ring r2'></div><div class='ring r3'></div><div class='dot'>K</div></div><div class='state'>__STATUS__</div><div class='card'><label>SECURE KRISHNA PAIRING LINK</label><input id='link' placeholder='https://your-PC:8765/#pairing-token'><button onclick='Krishna.connect(document.getElementById("link").value)'>CONNECT TO KRISHNA</button></div><div class='hint'>Paste the private pairing link created on your KRISHNA PC. Your link stays on this phone.</div><div class='footer'>LOCAL • PRIVATE • FREE ROUTING READY</div></body></html>
-            """;
-
-            @Override public void onCreate(Bundle savedInstanceState) { super.onCreate(savedInstanceState); showHome("SYSTEM READY • AWAITING SECURE LINK"); }
-            @SuppressLint("SetJavaScriptEnabled") private WebView makeWebView() { WebView v=new WebView(this); v.setLayoutParams(new ViewGroup.LayoutParams(-1,-1)); v.getSettings().setJavaScriptEnabled(true); v.getSettings().setDomStorageEnabled(true); v.setBackgroundColor(Color.rgb(2,6,4)); return v; }
-            private void showHome(String status) { panel=makeWebView(); panel.addJavascriptInterface(new Bridge(),"Krishna"); panel.loadDataWithBaseURL("https://krishna.local/", HOME.replace("__STATUS__",status),"text/html","UTF-8",null); setContentView(panel); }
-            private void openKrishna(String address) { panel=makeWebView(); panel.setWebViewClient(new WebViewClient(){ @Override public void onReceivedSslError(WebView v,SslErrorHandler h,SslError e){ h.cancel(); showHome("SECURE CERTIFICATE REQUIRED • INSTALL KRISHNA CA"); Toast.makeText(MainActivity.this,"KRISHNA certificate required",Toast.LENGTH_LONG).show(); } @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){ if(r.isForMainFrame()){ showHome("KRISHNA PC NOT REACHABLE • CHECK WI-FI"); } } }); setContentView(panel); panel.loadUrl(address); }
-            @Override public void onBackPressed(){ showHome("SYSTEM READY • AWAITING SECURE LINK"); }
-            private class Bridge { @JavascriptInterface public void connect(String address){ if(address==null || !(address.startsWith("https://")||address.startsWith("http://"))){ runOnUiThread(()->showHome("ENTER A VALID KRISHNA LINK")); return; } runOnUiThread(()->openKrishna(address.trim())); } }
-          }
+          import android.app.*;import android.os.*;import android.content.*;import android.content.pm.PackageManager;import android.graphics.*;import android.graphics.drawable.*;import android.view.*;import android.widget.*;
+          public class MainActivity extends Activity{
+          int d(int n){return(int)(n*getResources().getDisplayMetrics().density+.5f);} GradientDrawable bg(int c,int s){GradientDrawable g=new GradientDrawable();g.setColor(c);g.setCornerRadius(d(22));g.setStroke(d(1),Color.rgb(37,217,255));return g;}
+          void voice(){if(Build.VERSION.SDK_INT>=23&&checkSelfPermission("android.permission.RECORD_AUDIO")!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{"android.permission.RECORD_AUDIO","android.permission.POST_NOTIFICATIONS"},7);return;}startForegroundService(new Intent(this,VoiceService.class));}
+          public void onRequestPermissionsResult(int r,String[]p,int[]g){super.onRequestPermissionsResult(r,p,g);if(r==7&&g.length>0&&g[0]==0)voice();}
+          public void onCreate(Bundle b){super.onCreate(b);LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setGravity(Gravity.CENTER_HORIZONTAL);l.setPadding(d(24),d(48),d(24),d(32));l.setBackgroundColor(Color.rgb(2,7,13));TextView h=new TextView(this);h.setText("KRISHNA");h.setTextSize(32);h.setLetterSpacing(.18f);h.setTextColor(Color.rgb(37,217,255));h.setGravity(17);l.addView(h,new LinearLayout.LayoutParams(-1,d(64)));TextView s=new TextView(this);s.setText("YOUR PC · WITHIN REACH");s.setTextSize(12);s.setTextColor(Color.rgb(130,190,205));s.setGravity(17);l.addView(s,new LinearLayout.LayoutParams(-1,d(44)));Space sp=new Space(this);l.addView(sp,new LinearLayout.LayoutParams(1,0,1));EditText e=new EditText(this);e.setHint("Talk to KRISHNA");e.setHintTextColor(Color.rgb(140,190,205));e.setTextColor(Color.WHITE);e.setTextSize(18);e.setMinLines(4);e.setGravity(48);e.setPadding(d(22),d(20),d(22),d(20));e.setBackground(bg(Color.rgb(4,22,34),22));l.addView(e,new LinearLayout.LayoutParams(-1,-2));TextView n=new TextView(this);n.setText("SAY  ‘KRISHNA UTHA’  TO WAKE");n.setTextSize(11);n.setLetterSpacing(.08f);n.setTextColor(Color.rgb(100,220,255));n.setGravity(17);LinearLayout.LayoutParams q=new LinearLayout.LayoutParams(-1,d(58));q.topMargin=d(18);l.addView(n,q);setContentView(l);voice();}}
           EOF
-      - name: Build debug APK
-        run: gradle :app:assembleDebug --no-daemon
-      - name: Publish APK
-        uses: actions/upload-artifact@v4
+          cat > app/src/main/java/com/krishna/mobile/VoiceService.java <<'EOF'
+          package com.krishna.mobile;
+          import android.app.*;import android.content.*;import android.os.*;import android.speech.*;import java.util.*;
+          public class VoiceService extends Service implements RecognitionListener{SpeechRecognizer r;Handler h=new Handler();public IBinder onBind(Intent i){return null;}public int onStartCommand(Intent i,int f,int id){NotificationChannel c=new NotificationChannel("krishna_voice","KRISHNA listening",NotificationManager.IMPORTANCE_LOW);getSystemService(NotificationManager.class).createNotificationChannel(c);startForeground(11,new Notification.Builder(this,"krishna_voice").setSmallIcon(com.krishna.mobile.R.drawable.ic_krishna).setContentTitle("KRISHNA listening").setContentText("Say Krishna utha").build());listen();return START_STICKY;}void listen(){if(r!=null)r.destroy();r=SpeechRecognizer.createSpeechRecognizer(this);r.setRecognitionListener(this);Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"or-IN");i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE,"or-IN");i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);r.startListening(i);}void again(){h.postDelayed(()->listen(),700);}public void onResults(Bundle b){ArrayList<String>x=b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);if(x!=null)for(String s:x)if(s.toLowerCase().contains("krishna utha")){Intent i=new Intent(this,MainActivity.class);i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);startActivity(i);}again();}public void onError(int e){again();}public void onReadyForSpeech(Bundle b){}public void onBeginningOfSpeech(){}public void onRmsChanged(float f){}public void onBufferReceived(byte[]b){}public void onEndOfSpeech(){}public void onPartialResults(Bundle b){}public void onEvent(int a,Bundle b){}public void onDestroy(){if(r!=null)r.destroy();super.onDestroy();}}
+          EOF
+          test -f app/src/main/res/raw/krishna-ca.cer
+          cp app/src/main/res/raw/krishna-ca.cer app/src/main/res/raw/krishna_ca.cer
+          test -f app/src/main/res/raw/krishna_ca.cer
+          gradle :app:assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
         with:
-          name: KRISHNA-JARVIS-Mobile-APK
+          name: KRISHNA-Minimal-3D-Voice-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
