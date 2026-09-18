@@ -23,7 +23,7 @@ jobs:
       - name: Create KRISHNA Android app
         shell: bash
         run: |
-          mkdir -p app/src/main/java/com/krishna/mobile app/src/main/res/values app/src/main/res/xml
+          mkdir -p app/src/main/java/com/krishna/mobile app/src/main/res/values app/src/main/res/xml app/src/main/res/drawable
           cat > settings.gradle <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
@@ -54,7 +54,7 @@ jobs:
           cat > app/src/main/AndroidManifest.xml <<'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
             <uses-permission android:name="android.permission.INTERNET" />
-            <application android:allowBackup="false" android:label="KRISHNA" android:networkSecurityConfig="@xml/network_security_config" android:theme="@style/AppTheme">
+            <application android:allowBackup="false" android:icon="@drawable/ic_krishna" android:label="KRISHNA" android:networkSecurityConfig="@xml/network_security_config" android:theme="@style/AppTheme">
               <activity android:name=".MainActivity" android:exported="true">
                 <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
               </activity>
@@ -86,8 +86,12 @@ jobs:
             @Override public void onBackPressed() { WebView view=(WebView)((android.view.ViewGroup)findViewById(android.R.id.content)).getChildAt(0); if(view.canGoBack()) view.goBack(); else super.onBackPressed(); }
           }
           EOF
-      - name: Build debug APK
-        run: gradle --no-daemon :app:assembleDebug
+      - name: Add KRISHNA icon and build APK
+        run: |
+          cat > app/src/main/res/drawable/ic_krishna.xml <<'EOF'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#0B1D11" android:pathData="M0,0h108v108h-108z"/><path android:fillColor="#B9F66A" android:pathData="M24,18h15v27l26,-27h19L53,50l34,40H67L39,57v33H24z"/><path android:fillColor="#FFFFFF" android:fillAlpha="0.22" android:pathData="M8,8h92v4h-92z"/></vector>
+          EOF
+          gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: KRISHNA-Mobile-debug-APK
