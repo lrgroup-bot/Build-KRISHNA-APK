@@ -15,6 +15,12 @@ CORE_URL = os.getenv("KRISHNA_CONSOLE_CORE", "http://127.0.0.1:8766").rstrip("/"
 PROJECT = os.getenv("KRISHNA_CONSOLE_PROJECT", "general")
 STARTUP_ERRORS: list[str] = []
 
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 
 def _request(path: str, payload: dict | None = None, timeout: float = 120.0) -> dict:
     url = CORE_URL + path
