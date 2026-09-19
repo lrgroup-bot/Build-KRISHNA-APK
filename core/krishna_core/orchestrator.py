@@ -97,22 +97,92 @@ class Orchestrator:
             except Exception:
                 continue
 
-    def run_managed_goal(self, project, goal, action_name=None, components=None):
+    def run_managed_goal(self, project, goal, action_name=None, components=None, approved=False):
+        """Run a bounded managed-work transaction.
+
+        Investigation is always allowed for a registered project. Mutation requires:
+        1) a pre-registered project action,
+        2) the action to be allowed by project policy,
+        3) global KRISHNA_ALLOW_ACTIONS=1,
+        4) explicit approval for this transaction,
+        5) successful verification in a disposable shadow workspace.
+
+        This method never promotes shadow files into the live project. Promotion is a
+        separate boundary so a verified candidate cannot silently overwrite live work.
+        """
         task = self.task_ledger.create(project, goal)
         task_id = task["task_id"]
         try:
+            policy = self.projects.get(project)
+            if not policy:
+                self.task_ledger.update(task_id, "failed", "project_scope", {"error": "project_not_registered"})
+                raise KeyError(project)
+
             self.task_ledger.update(task_id, "running", "investigate")
             investigation = self.investigate(goal, project, components or [])
+
             if not action_name:
-                return self.task_ledger.update(task_id, "waiting_approval", "repair", {"investigation": investigation})
-            self.task_ledger.update(task_id, "running", "shadow_repair", {"action": action_name})
+                return self.task_ledger.update(task_id, "waiting_approval", "action_selection", {
+                    "investigation": investigation,
+                    "allowed_actions": list(policy.allowed_actions),
+                    "mutation_performed": False,
+                    "reason": "registered action must be selected before mutation",
+                })
+
+            if action_name not in policy.allowed_actions:
+                self.task_ledger.update(task_id, "failed", "policy", {
+                    "action": action_name, "mutation_performed": False,
+                    "error": "action_not_allowed_by_project_policy",
+                })
+                raise PermissionError(f"action not allowed for project: {action_name}")
+
+            registered = {row["name"]: row for row in self.actions.list(project)}
+            if action_name not in registered:
+                self.task_ledger.update(task_id, "failed", "action_registry", {
+                    "action": action_name, "mutation_performed": False,
+                    "error": "action_not_registered_at_runtime",
+                })
+                raise KeyError(f"{project}:{action_name}")
+
+            if registered[action_name].get("mutating"):
+                if not settings.allow_actions:
+                    return self.task_ledger.update(task_id, "waiting_approval", "mutation_disabled", {
+                        "action": action_name, "investigation": investigation,
+                        "mutation_performed": False,
+                        "reason": "KRISHNA_ALLOW_ACTIONS is disabled",
+                    })
+                if not approved:
+                    return self.task_ledger.update(task_id, "waiting_approval", "approval", {
+                        "action": action_name, "investigation": investigation,
+                        "mutation_performed": False,
+                        "reason": "explicit approval required for this mutating transaction",
+                    })
+
+            self.task_ledger.update(task_id, "running", "shadow_repair", {
+                "action": action_name, "mutation_scope": "shadow_only",
+            })
             result = self.run_shadow_repair(project, goal, action_name, components or [])
             if result.get("promotable"):
                 self.project_brain.learn_verified(project, goal, result)
-                return self.task_ledger.update(task_id, "verified", "complete", {"repair": result})
-            return self.task_ledger.update(task_id, "rejected", "verification", {"repair": result})
+                return self.task_ledger.update(task_id, "verified", "promotion_ready", {
+                    "repair": result,
+                    "mutation_performed": True,
+                    "live_project_modified": False,
+                    "promotion_ready": True,
+                })
+            return self.task_ledger.update(task_id, "rejected", "verification", {
+                "repair": result,
+                "mutation_performed": True,
+                "live_project_modified": False,
+                "promotion_ready": False,
+            })
         except Exception as exc:
-            self.task_ledger.update(task_id, "failed", "error", {"error": f"{type(exc).__name__}: {exc}"})
+            current = self.task_ledger.get(task_id)
+            if not current or current.get("status") != "failed":
+                self.task_ledger.update(task_id, "failed", "error", {
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "live_project_modified": False,
+                })
             raise
 
     def register_project(self, name, root, privacy="local_only",
