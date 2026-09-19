@@ -614,7 +614,53 @@ STRICT OUTPUT CONTRACT:
 - Never emit specialist templates, SQL, code, schemas, marketing/legal/media advice, or unrelated implementation guidance unless the user explicitly requested it.
 - If a diagnostic hypothesis conflicts with explicit evidence, discard the hypothesis.
 """
-            out = self.handle(prompt, project, source, chat_id)
+            # Diagnostic reports cross a stricter trust boundary than normal chat:
+            # specialists/hypotheses may guide reasoning but can never become factual evidence.
+            result = self.router.route(prompt, privacy=(registered.privacy if registered else "approved_cloud"))
+            model_text = str(result.get("text") or "").strip()
+            evidence_blob = " ".join(str(row.get("detail", "")) for row in evidence).lower()
+            forbidden_domain_terms = {
+                "sla", "cab", "cmdb", "stakeholder satisfaction", "it service manager",
+                "continuous service improvement", "continual service improvement",
+            }
+            unsupported = sorted(
+                term for term in forbidden_domain_terms
+                if term in model_text.lower() and term not in evidence_blob
+            )
+            if unsupported:
+                # Fail closed to a deterministic evidence rendering. This deliberately
+                # sacrifices prose quality rather than allowing advisory prompt content
+                # to be presented as observed fact.
+                observed_lines = [
+                    f"- [{row.get('source')}/{row.get('kind')}] {str(row.get('detail', '')).strip()[:900]}"
+                    for row in evidence[:12]
+                ]
+                model_text = (
+                    "Observed evidence:\n" + ("\n".join(observed_lines) if observed_lines else "- No project evidence was collected.")
+                    + "\n\nPotential issues:\n"
+                    + ("- The model attempted to introduce unsupported specialist-domain claims; those claims were removed."
+                       if evidence else "- No evidence-backed issue can be stated.")
+                    + "\n\nLimitations:\n- This fallback reports collected probe evidence only; advisory specialist content and unverified hypotheses are excluded."
+                )
+                result["grounding_fallback"] = True
+                result["unsupported_claim_terms"] = unsupported
+            else:
+                result["grounding_fallback"] = False
+
+            out = {
+                "task_id": str(uuid.uuid4()),
+                "chat_id": chat_id,
+                "neural_intent": self.handle_event(
+                    source or "pc", "managed_report", message,
+                    severity="notice", project=project,
+                )["intent"],
+                "skills_used": [],
+                **result,
+            }
+            self.memory.remember(project, "conversation", message, {"task_id": out["task_id"], "chat_id": chat_id})
+            if chat_id:
+                self.memory.add_chat_message(chat_id, "user", message, {"task_id": out["task_id"], "source": source})
+                self.memory.add_chat_message(chat_id, "assistant", out["text"], {"task_id": out["task_id"], "provider": out.get("provider")})
             final_status = "completed" if evidence else "needs_evidence"
             detail = {
                 "capability": "sudarshan",
