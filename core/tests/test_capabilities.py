@@ -237,5 +237,30 @@ class KrishnaCapabilityTests(unittest.TestCase):
         self.assertTrue(done["complete"])
 
 
+    def test_project_and_chat_workspace_persist(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = str(Path(td) / "workspace.db")
+            root = str(Path(td) / "project")
+            Path(root).mkdir()
+            first = MemoryStore(path)
+            first.save_project(
+                "KUBER", root, "local_only",
+                ["shadow_patch"], ["compile"], {"goal": "research"},
+            )
+            first.create_chat("chat-1", "KUBER", "Research")
+            first.add_chat_message("chat-1", "user", "Check the project")
+            first.add_chat_message("chat-1", "assistant", "I am checking it.")
+
+            second = MemoryStore(path)
+            projects = second.projects()
+            self.assertEqual("KUBER", projects[0]["name"])
+            self.assertEqual(["shadow_patch"], projects[0]["allowed_actions"])
+            chats = second.chats("KUBER")
+            self.assertEqual("Research", chats[0]["title"])
+            messages = second.chat_messages("chat-1")
+            self.assertEqual(["user", "assistant"], [m["role"] for m in messages])
+            self.assertEqual("Check the project", messages[0]["content"])
+
+
 if __name__ == "__main__":
     unittest.main()
