@@ -45,6 +45,10 @@ class ProjectRegistry:
             self._projects[project.name] = project
         return asdict(project)
 
+    def unregister(self, name: str) -> bool:
+        with self._lock:
+            return self._projects.pop(name, None) is not None
+
     def get(self, name: str) -> ProjectPolicy | None:
         with self._lock:
             return self._projects.get(name)
