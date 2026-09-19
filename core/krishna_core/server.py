@@ -1,5 +1,5 @@
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-import json, time, threading, base64
+import json, time, threading, base64, sys
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
@@ -41,8 +41,9 @@ def mobile_link_state():
             "connected": bool(last_seen and age <= 20.0),
             "age_seconds": None if age is None else round(age, 1),
         }
-DASHBOARD = (Path(__file__).resolve().parents[1] / "dashboard.html")
-AVATAR_B64 = Path(__file__).resolve().parents[2] / "avatar" / "krishna_child_360.webp.b64"
+_BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+DASHBOARD = _BUNDLE_ROOT / "dashboard.html"
+AVATAR_B64 = _BUNDLE_ROOT / "avatar" / "krishna_child_360.webp.b64"
 
 
 def avatar_360_bytes():
@@ -197,6 +198,8 @@ class Handler(BaseHTTPRequestHandler):
                     "registered_project_change_observer",
                     "mobile_event_bridge",
                     "child_krishna_360_avatar",
+                    "persistent_project_chats",
+                    "windows_conversation_console",
                 ],
                 "mutating_actions_enabled": settings.allow_actions,
             })
