@@ -276,3 +276,11 @@ class MemoryStore:
                 }
                 for r in cur.fetchall()
             ]
+
+
+    def close(self):
+        with self.lock:
+            if self.db is not None:
+                self.db.commit()
+                self.db.close()
+                self.db = None
