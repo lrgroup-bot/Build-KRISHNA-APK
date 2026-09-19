@@ -27,13 +27,12 @@ $ShadowRoot = Join-Path $KrishnaRoot "shadow"
 $LogRoot = Join-Path $KrishnaRoot "logs"
 $NpmRoot = Join-Path $InstallRoot "npm"
 $PythonRoot = Join-Path $InstallRoot "python"
-$CbmRoot = "E:\KRISHNA-CBM"
+$CbmRoot = Join-Path $InstallRoot "cbm-portable"
 $CuaRoot = Join-Path $InstallRoot "cua"
 $AriseRoot = Join-Path $InstallRoot "ARISE"
 $GooseRoot = Join-Path $InstallRoot "goose"
 
 @($InstallRoot,$ConfigRoot,$RuntimeRoot,$ShadowRoot,$LogRoot,$NpmRoot,$PythonRoot,$CuaRoot,$AriseRoot,$GooseRoot) | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
-if (-not (Test-Path $CbmRoot)) { New-Item -ItemType Directory -Force -Path $CbmRoot | Out-Null }
 
 Write-Step "Checking prerequisites"
 if (-not (Has-Cmd "git")) { throw "Git is required." }
@@ -81,8 +80,22 @@ Expand-Archive -LiteralPath $cbmZip -DestinationPath $cbmExtract -Force
 $cbmExeSource = Get-ChildItem -LiteralPath $cbmExtract -Filter "codebase-memory-mcp.exe" -File -Recurse | Select-Object -First 1
 if (-not $cbmExeSource) { throw "codebase-memory-mcp.exe not found in official release archive" }
 
-New-Item -ItemType Directory -Force -Path $CbmRoot | Out-Null
-$cbmExeDest = Join-Path $CbmRoot "codebase-memory-mcp.exe"
+$releaseDir = Join-Path $CbmRoot ("releases\" + $release.tag_name)
+New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+$writeProbe = Join-Path $releaseDir (".write-test-" + [guid]::NewGuid().ToString("N") + ".tmp")
+try {
+  "krishna" | Set-Content -LiteralPath $writeProbe -Encoding ASCII
+  Remove-Item -LiteralPath $writeProbe -Force
+} catch {
+  throw "KRISHNA cannot write to $releaseDir. $($_.Exception.Message)"
+}
+$cbmExeDest = Join-Path $releaseDir "codebase-memory-mcp.exe"
+if (Test-Path $cbmExeDest) {
+  try {
+    $existing = (& $cbmExeDest --version 2>&1 | Out-String).Trim()
+    if ($existing) { Write-Ok "Existing Codebase Memory release found: $existing" }
+  } catch {}
+}
 Copy-Item -LiteralPath $cbmExeSource.FullName -Destination $cbmExeDest -Force
 Remove-Item $cbmExtract -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item $cbmZip -Force -ErrorAction SilentlyContinue
@@ -125,13 +138,27 @@ if (-not $SkipGoose) {
 
 $npmBin = $NpmRoot
 $mythosCmd = Join-Path $npmBin "mythos-agent.cmd"
-$calmCmd = Join-Path $npmBin "calm.cmd"
+$calmCmd = Join-Path $npmBin "calm-mcp.cmd"
 $miniCmd = Join-Path $AgentVenv "Scripts\mini.exe"
-$sweRexCmd = Join-Path $AgentVenv "Scripts\swe-rex.exe"
-$cbmCmd = Join-Path $CbmRoot "codebase-memory-mcp.exe"
+$sweRexCmd = Join-Path $AgentVenv "Scripts\swerex-remote.exe"
+$cbmCmd = $cbmExeDest
 $cuaCmd = Join-Path $CuaRoot "bin\cua-driver.exe"
 $arisePython = Join-Path $AriseRoot ".venv\Scripts\python.exe"
 $gooseCmd = Join-Path $GooseRoot "bin\goose.exe"
+
+$requiredLocal = @(
+  @{Name="mythos-agent"; Path=$mythosCmd},
+  @{Name="CALM"; Path=$calmCmd},
+  @{Name="mini-SWE-agent"; Path=$miniCmd},
+  @{Name="SWE-ReX"; Path=$sweRexCmd},
+  @{Name="Codebase Memory"; Path=$cbmCmd}
+)
+foreach ($item in $requiredLocal) {
+  if (-not (Test-Path -LiteralPath $item.Path)) {
+    throw "$($item.Name) expected executable was not found at $($item.Path)"
+  }
+  Write-Ok "$($item.Name) executable verified at $($item.Path)"
+}
 
 $envFile = Join-Path $ConfigRoot "mythos-stack.env"
 @(
