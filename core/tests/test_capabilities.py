@@ -363,9 +363,10 @@ class KrishnaCapabilityTests(unittest.TestCase):
                     [Evidence("log", "tail", "Database initialized. Proxy not configured.", 1.0)],
                     {"project": "KRISHNA", "privacy": "local_only"},
                 )
-                self.assertIn("warning is not an error", captured["prompt"])
-                self.assertIn("initialized", captured["prompt"])
-                self.assertIn("not configured", captured["prompt"])
+                self.assertIn("Do not convert warnings, informational messages", captured["prompt"])
+                self.assertIn("successful initialization messages into failures", captured["prompt"])
+                self.assertIn('"initialized"', captured["prompt"])
+                self.assertIn('"not configured"', captured["prompt"])
             finally:
                 orch.task_ledger.close()
                 orch.memory.close()
