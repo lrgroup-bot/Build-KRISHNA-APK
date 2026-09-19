@@ -581,6 +581,22 @@ class Handler(BaseHTTPRequestHandler):
             except RuntimeError as exc:
                 return self._json(409, {"error": str(exc)})
 
+        if self.path == "/api/work/promotion/prepare":
+            project=str(data.get("project","")).strip()
+            candidate=str(data.get("candidate_root","")).strip()
+            if not project or not candidate: return self._json(400,{"error":"project and candidate_root are required"})
+            try: return self._json(200,orch.prepare_promotion(project,candidate,data.get("task_id")))
+            except KeyError as exc: return self._json(404,{"error":str(exc)})
+            except ValueError as exc: return self._json(400,{"error":str(exc)})
+
+        if self.path == "/api/work/promotion/apply":
+            token=str(data.get("promotion_token","")).strip()
+            if not token: return self._json(400,{"error":"promotion_token is required"})
+            try: return self._json(200,orch.promote_candidate(token,approved=bool(data.get("approved",False))))
+            except KeyError as exc: return self._json(404,{"error":str(exc)})
+            except PermissionError as exc: return self._json(403,{"error":str(exc)})
+            except (ValueError,RuntimeError) as exc: return self._json(409,{"error":str(exc)})
+
         if self.path == "/api/repair/shadow":
             project = str(data.get("project", "")).strip()
             symptom = str(data.get("symptom", "")).strip()
