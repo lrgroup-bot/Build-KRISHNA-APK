@@ -395,9 +395,18 @@ Evidence:
 
     @staticmethod
     def _looks_like_work_request(message):
-        text=(message or "").lower()
-        work_words=("fix ","repair ","build ","create ","implement ","code ","test ","check project","inspect ","deploy ","install ","update project","complete project","debug ")
-        return any(word in text for word in work_words)
+        text = " ".join((message or "").lower().split())
+        if not text:
+            return False
+        phrases = (
+            "fix ", "repair ", "build ", "create ", "implement ", "code ", "test ",
+            "inspect ", "deploy ", "install ", "debug ", "check project",
+            "check this project", "check the project", "check my project",
+            "project health", "health check", "identify any problems",
+            "identify problems", "find problems", "find errors", "check for errors",
+            "update project", "complete project",
+        )
+        return any(phrase in text for phrase in phrases)
 
     def _specialist_context(self, message, limit=4):
         selected = self.specialists.select(message, limit=limit) if self.specialists.items else []
