@@ -78,6 +78,7 @@ class Orchestrator:
             self.memory,
             self.governor,
             self.shadow,
+            Path(self.db_path).resolve().parent / ".krishna_state" / "promotion-candidates",
         )
         self._restore_projects()
         self._register_builtin_probes()
@@ -167,11 +168,14 @@ class Orchestrator:
             result = self.run_shadow_repair(project, goal, action_name, components or [])
             if result.get("promotable"):
                 self.project_brain.learn_verified(project, goal, result)
+                candidate_root=result.get("candidate_root")
+                promotion=self.prepare_promotion(project,candidate_root,task_id=task_id) if candidate_root else None
                 return self.task_ledger.update(task_id, "verified", "promotion_ready", {
                     "repair": result,
+                    "promotion": promotion,
                     "mutation_performed": True,
                     "live_project_modified": False,
-                    "promotion_ready": True,
+                    "promotion_ready": bool(promotion),
                 })
             return self.task_ledger.update(task_id, "rejected", "verification", {
                 "repair": result,
