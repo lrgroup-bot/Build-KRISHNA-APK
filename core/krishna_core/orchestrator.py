@@ -198,9 +198,12 @@ class Orchestrator:
         ) or "- no evidence collected"
         prompt = f"""You are KRISHNA's diagnostic reasoner.
 Produce at most 5 concise root-cause hypotheses for an authorized software project.
+Every hypothesis must be directly supported by the supplied evidence. Do not convert warnings, informational messages,
+or successful initialization messages into failures. Preserve explicit negation and status words such as "initialized",
+"complete", "not configured", "warning", and "error". If evidence is ambiguous, say that it is ambiguous.
 Do not propose exploitation. Do not claim a cause is proven.
 Return one hypothesis per line as: confidence|statement
-Confidence is 0.00-1.00.
+Confidence is 0.00-1.00. Use confidence above 0.80 only when explicit evidence strongly supports the statement.
 
 Project: {context.get('project', 'general')}
 Symptom: {symptom}
@@ -457,7 +460,7 @@ Evidence:
             ) or "No external specialist library was available; KRISHNA used built-in diagnostic skills only."
 
             prompt = f"""KRISHNA has internally invoked Sudarshan for a READ-ONLY managed investigation.
-The evidence below was actually collected by registered non-mutating probes. Report what was observed, distinguish evidence from hypotheses, and state limitations. Do not say that tests, repairs, installations, file edits, browser actions, or other mutations happened unless explicit action evidence says so. Do not ask for approval merely to inspect or report.
+The evidence below was actually collected by registered non-mutating probes. Report only claims grounded in that evidence, distinguish evidence from hypotheses, and state limitations. Quote or closely preserve important status semantics: a warning is not an error, "initialized" is not an initialization failure, and "not configured" is not proof of a broken component. Never invent a successful health conclusion when evidence is mixed or incomplete. Do not say that tests, repairs, installations, file edits, browser actions, or other mutations happened unless explicit action evidence says so. Do not ask for approval merely to inspect or report.
 
 User request: {message}
 Project: {project}
