@@ -41,9 +41,15 @@ def mobile_link_state():
             "connected": bool(last_seen and age <= 20.0),
             "age_seconds": None if age is None else round(age, 1),
         }
-_BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
-DASHBOARD = _BUNDLE_ROOT / "dashboard.html"
-AVATAR_B64 = _BUNDLE_ROOT / "avatar" / "krishna_child_360.webp.b64"
+if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    _BUNDLE_ROOT = Path(sys._MEIPASS)
+    DASHBOARD = _BUNDLE_ROOT / "dashboard.html"
+    AVATAR_B64 = _BUNDLE_ROOT / "avatar" / "krishna_child_360.webp.b64"
+else:
+    _CORE_ROOT = Path(__file__).resolve().parents[1]
+    _REPO_ROOT = Path(__file__).resolve().parents[2]
+    DASHBOARD = _CORE_ROOT / "dashboard.html"
+    AVATAR_B64 = _REPO_ROOT / "avatar" / "krishna_child_360.webp.b64"
 
 
 def avatar_360_bytes():
