@@ -7,6 +7,7 @@ on:
       - fix/krishna-exe-core-start
       - feature/mobile-pc-control-safe-patch
       - main
+      - feature/web-first-validation
     paths:
       - 'core/**'
       - 'avatar/**'
@@ -48,6 +49,7 @@ jobs:
             --collect-submodules krishna_core `
             --collect-all playwright `
             --add-data "core/dashboard.html;." `
+            --add-data "core/web_validation.html;." `
             --add-data "avatar/krishna_child_360.webp.b64;avatar" `
             core/krishna_desktop.py
 
@@ -60,6 +62,7 @@ jobs:
             --collect-submodules krishna_core `
             --collect-all playwright `
             --add-data "core/dashboard.html;." `
+            --add-data "core/web_validation.html;." `
             --add-data "avatar/krishna_child_360.webp.b64;avatar" `
             core/krishna_console.py
 
