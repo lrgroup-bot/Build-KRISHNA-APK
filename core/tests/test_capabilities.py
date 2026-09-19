@@ -629,7 +629,8 @@ class KrishnaCapabilityTests(unittest.TestCase):
                 self.assertNotIn("successfully run", joined)
                 self.assertNotIn("operational", joined)
                 self.assertEqual(1, len(statements))
-                self.assertTrue(statements[0].lower().startswith("check:"))
+                self.assertTrue(statements[0].lower().startswith(("check:", "possible:")))
+                self.assertIn("root listing", statements[0].lower())
                 self.assertLessEqual(out["hypotheses"][0]["confidence"], 0.70)
                 self.assertEqual("untested", out["hypotheses"][0]["status"])
             finally:
