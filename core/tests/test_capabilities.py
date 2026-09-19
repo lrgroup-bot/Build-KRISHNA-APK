@@ -62,7 +62,8 @@ class KrishnaCapabilityTests(unittest.TestCase):
             first = ingestor.ingest("p", "web", "hello world")
             second = ingestor.ingest("p", "web", "hello world")
             self.assertEqual(1, first["written"])
-            self.assertEqual(0, second["written"])\n            store.close()
+            self.assertEqual(0, second["written"])
+            store.close()
 
     def test_security_scanner_finds_risky_execution(self):
         findings = DefensiveSecurityScanner().scan_text("x.py", "import os\nos.system('echo x')\n")
@@ -150,7 +151,8 @@ class KrishnaCapabilityTests(unittest.TestCase):
             result = agent.run("p", str(root), "broken", patcher, checks)
             self.assertEqual("verified", result["status"])
             self.assertTrue(result["promotable"])
-            self.assertEqual("broken", (root / "app.txt").read_text(encoding="utf-8"))\n            store.close()
+            self.assertEqual("broken", (root / "app.txt").read_text(encoding="utf-8"))
+            store.close()
 
 
     def test_knag_routes_service_failure_to_recovery_investigation(self):
@@ -261,7 +263,9 @@ class KrishnaCapabilityTests(unittest.TestCase):
             self.assertEqual("Research", chats[0]["title"])
             messages = second.chat_messages("chat-1")
             self.assertEqual(["user", "assistant"], [m["role"] for m in messages])
-            self.assertEqual("Check the project", messages[0]["content"])\n            second.close()\n            first.close()
+            self.assertEqual("Check the project", messages[0]["content"])
+            second.close()
+            first.close()
 
 
     def test_skill_runtime_discovers_and_matches_specialists(self):
