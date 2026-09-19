@@ -560,6 +560,27 @@ class Handler(BaseHTTPRequestHandler):
                 mark("INVESTIGATION ERROR", str(exc)[:160])
                 return self._json(500, {"error": str(exc)})
 
+        if self.path == "/api/work/run":
+            project = str(data.get("project", "")).strip()
+            goal = str(data.get("goal", "")).strip()
+            action = str(data.get("action", "")).strip() or None
+            if not project or not goal:
+                return self._json(400, {"error": "project and goal are required"})
+            try:
+                out = orch.run_managed_goal(
+                    project, goal,
+                    action_name=action,
+                    components=data.get("components") or [],
+                    approved=bool(data.get("approved", False)),
+                )
+                return self._json(200, out)
+            except KeyError as exc:
+                return self._json(404, {"error": str(exc)})
+            except PermissionError as exc:
+                return self._json(403, {"error": str(exc)})
+            except RuntimeError as exc:
+                return self._json(409, {"error": str(exc)})
+
         if self.path == "/api/repair/shadow":
             project = str(data.get("project", "")).strip()
             symptom = str(data.get("symptom", "")).strip()
