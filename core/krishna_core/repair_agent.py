@@ -12,12 +12,15 @@ class RepairAgent:
     """Evidence-first shadow repair workflow with mandatory verification."""
 
     def __init__(self, investigator, verifier, memory, governor,
-                 shadow: ShadowWorkspaceManager | None = None):
+                 shadow: ShadowWorkspaceManager | None = None, candidate_root: str | Path | None = None):
         self.investigator = investigator
         self.verifier = verifier
         self.memory = memory
         self.governor = governor
         self.shadow = shadow or ShadowWorkspaceManager()
+        self.candidate_root = Path(candidate_root).resolve() if candidate_root else None
+        if self.candidate_root:
+            self.candidate_root.mkdir(parents=True, exist_ok=True)
 
     def run(self, project: str, project_root: str, symptom: str,
             patcher: Callable[[Path, dict], dict],
@@ -42,12 +45,21 @@ class RepairAgent:
                     repair=str(patch),
                     verification=verification,
                 )
+                candidate_path = None
+                if verification["verified"] and self.candidate_root:
+                    candidate_path = self.candidate_root / repair_id
+                    if candidate_path.exists():
+                        import shutil
+                        shutil.rmtree(candidate_path)
+                    import shutil
+                    shutil.copytree(work_path, candidate_path)
                 self.memory.audit(repair_id, status, f"{project}:{symptom}")
                 return {
                     "repair_id": repair_id,
                     "project": project,
                     "status": status,
                     "promotable": bool(verification["verified"]),
+                    "candidate_root": str(candidate_path) if candidate_path else None,
                     "investigation": investigation,
                     "patch": patch,
                     "verification": verification,
