@@ -30,11 +30,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller playwright
 
-      - name: Compile Python sources
+      - name: Compile sources
         shell: pwsh
         run: |
           python -m py_compile core/krishna_console.py core/krishna_desktop.py
           python -m compileall -q core/krishna_core
+          [void][scriptblock]::Create((Get-Content scripts/PATCH_KRISHNA_V3.ps1 -Raw))
+          [void][scriptblock]::Create((Get-Content scripts/START_KRISHNA.ps1 -Raw))
+          Write-Host "PowerShell scripts parsed successfully"
 
       - name: Build KRISHNA desktop app
         shell: pwsh
