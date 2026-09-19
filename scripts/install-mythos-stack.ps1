@@ -50,9 +50,16 @@ Write-Ok "SWE-ReX installed"
 Write-Step "Installing codebase-memory-mcp using the official Windows installer"
 $cbmInstaller = Join-Path $env:TEMP "krishna-codebase-memory-install.ps1"
 Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.ps1" -OutFile $cbmInstaller
-powershell -NoProfile -ExecutionPolicy Bypass -File $cbmInstaller
-if ($LASTEXITCODE -ne 0) { throw "codebase-memory-mcp installer failed" }
-Write-Ok "codebase-memory-mcp installed"
+powershell -NoProfile -ExecutionPolicy Bypass -File $cbmInstaller --skip-config
+if ($LASTEXITCODE -ne 0) {
+  if (Has-Cmd "codebase-memory-mcp") {
+    Write-Warn "codebase-memory-mcp binary is present, but its installer returned a non-zero status. Continuing because KRISHNA uses the binary directly and does not require agent auto-configuration."
+  } else {
+    throw "codebase-memory-mcp installer failed and the binary was not found"
+  }
+} else {
+  Write-Ok "codebase-memory-mcp installed (agent auto-configuration skipped)"
+}
 
 if (-not $SkipCua) {
   Write-Step "Installing CUA Driver using the official Windows installer"
