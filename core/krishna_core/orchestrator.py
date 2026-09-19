@@ -406,6 +406,8 @@ Generate at most 5 POSSIBLE investigation directions, not factual conclusions.
 Use only the supplied evidence. Never claim that a project is healthy, correct, operational,
 configured correctly, complete, successful, error-free, ready, or that an action ran unless
 the evidence explicitly records that exact event. Absence of an error is not evidence of success.
+Do not convert warnings, informational messages, or missing observations into proof of health,
+success, correctness, failure, or absence of problems.
 Do not infer repetition, chronology, causation, or component presence from a root listing.
 Return one line as: confidence|possible: <statement>
 Confidence must be 0.00-0.70. These remain untested until a verification check proves them.
