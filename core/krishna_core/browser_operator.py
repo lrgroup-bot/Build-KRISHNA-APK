@@ -67,7 +67,10 @@ class BrowserOperator:
         actions = actions or []
 
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=self.headless)
+            try:
+                browser = p.chromium.launch(channel="chrome", headless=self.headless)
+            except Exception:
+                browser = p.chromium.launch(headless=self.headless)
             page = browser.new_page()
             page.set_default_timeout(self.timeout_ms)
             page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
