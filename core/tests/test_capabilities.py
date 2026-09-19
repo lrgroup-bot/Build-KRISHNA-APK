@@ -542,10 +542,10 @@ class KrishnaCapabilityTests(unittest.TestCase):
                 orch.router.route = route
                 out = orch.handle_managed_request("Inspect project health. Do not modify anything.", "demo")
                 self.assertTrue(out["grounding_fallback"])
-                self.assertIn("cmdb", out["unsupported_claim_terms"])
-                self.assertIn("sla", out["unsupported_claim_terms"])
+                self.assertEqual(out["grounding_mode"], "deterministic_evidence_only")
+                self.assertTrue(out["model_draft_discarded"])
                 self.assertNotIn("CMDB and SLA are healthy", out["text"])
-                self.assertIn("collected probe evidence only", out["text"])
+                self.assertIn("diagnostic hypotheses and specialist prompts are excluded", out["text"])
                 task = orch.task_ledger.get(out["managed_task_id"])
                 self.assertFalse(task["detail"]["mutation_performed"])
             finally:
