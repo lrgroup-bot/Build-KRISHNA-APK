@@ -38,6 +38,9 @@ jobs:
           curl -fsS -H 'X-Krishna-Device: android-primary' http://127.0.0.1:18766/api/core/state >/tmp/mobile-state.json
           curl -fsS http://127.0.0.1:18766/api/mobile/connection >/tmp/mobile-connection.json
           curl -fsS http://127.0.0.1:18766/api/avatar360 >/tmp/krishna-avatar.webp
+          curl -fsS -H 'Content-Type: application/json' -H 'X-Krishna-Device: android-primary' \
+            -d '{"action":"status","project":"general","payload":{}}' \
+            http://127.0.0.1:18766/api/mobile/control >/tmp/mobile-control.json
           test -s /tmp/krishna-avatar.webp
           python - <<'PY'
           data=open('/tmp/krishna-avatar.webp','rb').read(16)
@@ -51,4 +54,8 @@ jobs:
           assert state['device'] == 'android-primary', state
           assert state['last_path'] == '/api/core/state', state
           print('KRISHNA Mobile backend connection verified:', state)
+          control=json.load(open('/tmp/mobile-control.json', encoding='utf-8'))
+          assert control['core'] == 'ONLINE', control
+          assert control['ok'] is True, control
+          print('KRISHNA Mobile -> PC control verified:', control['core'])
           PY
