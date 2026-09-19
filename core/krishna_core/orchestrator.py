@@ -54,7 +54,26 @@ class Orchestrator:
             self.governor,
             self.shadow,
         )
+        self._restore_projects()
         self._register_builtin_probes()
+
+    def _restore_projects(self):
+        for item in self.memory.projects():
+            try:
+                self.projects.register(ProjectPolicy(
+                    name=item["name"],
+                    root=item["root"],
+                    privacy=item["privacy"],
+                    allowed_actions=item.get("allowed_actions") or [],
+                    verification_checks=item.get("verification_checks") or [],
+                    metadata=item.get("metadata") or {},
+                ))
+                self.graph.upsert_node(item["name"], "project", {
+                    "root": item["root"],
+                    "privacy": item["privacy"],
+                })
+            except Exception:
+                continue
 
     def register_project(self, name, root, privacy="local_only",
                          allowed_actions=None, verification_checks=None, metadata=None):
@@ -70,6 +89,12 @@ class Orchestrator:
             "root": item["root"],
             "privacy": item["privacy"],
         })
+        self.memory.save_project(
+            item["name"], item["root"], item["privacy"],
+            item.get("allowed_actions") or [],
+            item.get("verification_checks") or [],
+            item.get("metadata") or {},
+        )
         self.memory.audit("project_register", "complete", name)
         return item
 
@@ -274,6 +299,18 @@ Evidence:
         self.memory.audit("goal_evaluation", result["conclusion"], project)
         return result
 
+    def create_chat(self, project, title="New chat"):
+        if project != "general" and not self.projects.get(project):
+            raise KeyError(project)
+        chat_id = str(uuid.uuid4())
+        return self.memory.create_chat(chat_id, project, title.strip() or "New chat")
+
+    def chats(self, project=None):
+        return self.memory.chats(project, 100)
+
+    def chat_messages(self, chat_id, limit=40):
+        return self.memory.chat_messages(chat_id, limit)
+
     def ingest_knowledge(self, project, source, text, metadata=None):
         result = self.knowledge.ingest(project, source, text, metadata)
         self.memory.audit("knowledge_ingest", "complete", f"{project}:{source}:{result}")
@@ -296,7 +333,7 @@ Evidence:
     def neural_state(self):
         return self.neural.snapshot()
 
-    def handle(self, message, project="general", source="pc"):
+    def handle(self, message, project="general", source="pc", chat_id=None):
         task_id = str(uuid.uuid4())
         self.memory.audit(task_id, "received", message)
         event_kind = "mobile_command" if source == "mobile" else "user_command"
@@ -307,6 +344,15 @@ Evidence:
         )
         context = self.memory.recall(project, 12)
         incidents = self.memory.incidents(project, 5)
+        chat_context = []
+        if chat_id:
+            chat = self.memory.chat(chat_id)
+            if not chat:
+                raise KeyError(f"chat not found: {chat_id}")
+            if chat["project"] != project:
+                raise ValueError("chat does not belong to selected project")
+            chat_context = self.memory.chat_messages(chat_id, 24)
+            self.memory.add_chat_message(chat_id, "user", message, {"task_id": task_id, "source": source})
         p = self.projects.get(project)
         privacy = p.privacy if p else "approved_cloud"
         prompt = f"""You are KRISHNA Core, a persistent autonomous software intelligence.
@@ -316,8 +362,9 @@ Never execute arbitrary shell commands from natural language. Mutating actions m
 For registered projects, prefer evidence, shadow testing, verification, rollback, and learned incident memory.
 
 Project: {project}
-Recent memory: {context}
+Recent project memory: {context}
 Recent incidents: {incidents}
+Current project chat history: {chat_context}
 Neural routing intent: {neural['intent']}
 User: {message}
 
@@ -325,6 +372,11 @@ If the request describes a failure, recommend investigation and evidence collect
 If it requires an action, describe the bounded action and verification criteria.
 """
         result = self.router.route(prompt, privacy=privacy)
-        self.memory.remember(project, "conversation", message, {"task_id": task_id})
+        self.memory.remember(project, "conversation", message, {"task_id": task_id, "chat_id": chat_id})
+        if chat_id:
+            self.memory.add_chat_message(
+                chat_id, "assistant", result["text"],
+                {"task_id": task_id, "provider": result["provider"]},
+            )
         self.memory.audit(task_id, "answered", result["provider"])
-        return {"task_id": task_id, "neural_intent": neural["intent"], **result}
+        return {"task_id": task_id, "chat_id": chat_id, "neural_intent": neural["intent"], **result}

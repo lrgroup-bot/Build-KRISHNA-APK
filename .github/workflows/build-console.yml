@@ -1,17 +1,19 @@
-name: Build KRISHNA Windows Console
+name: Build KRISHNA Windows App
 
 on:
   push:
     branches:
       - feature/autonomous-browser-research
+      - fix/krishna-exe-core-start
       - main
     paths:
       - 'core/**'
+      - 'avatar/**'
       - '.github/workflows/build-console.yml'
   workflow_dispatch:
 
 jobs:
-  build-console:
+  build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,32 +22,63 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install console dependencies
+      - name: Install Windows app dependencies
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
           python -m pip install pyinstaller playwright
 
-      - name: Build KRISHNA.exe
+      - name: Compile Python sources
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --onefile `
+          python -m py_compile core/krishna_console.py core/krishna_desktop.py
+          python -m compileall -q core/krishna_core
+
+      - name: Build KRISHNA desktop app
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed `
             --name KRISHNA `
             --paths core `
             --collect-submodules krishna_core `
             --collect-all playwright `
             --add-data "core/dashboard.html;." `
+            --add-data "avatar/krishna_child_360.webp.b64;avatar" `
+            core/krishna_desktop.py
+
+      - name: Build KRISHNA console fallback
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile `
+            --name KRISHNA-Console `
+            --paths core `
+            --collect-submodules krishna_core `
+            --collect-all playwright `
+            --add-data "core/dashboard.html;." `
+            --add-data "avatar/krishna_child_360.webp.b64;avatar" `
             core/krishna_console.py
 
-      - name: Smoke test executable
+      - name: Live smoke test bundled Core
         shell: pwsh
         run: |
           if (!(Test-Path "dist/KRISHNA.exe")) { throw "KRISHNA.exe missing" }
+          if (!(Test-Path "dist/KRISHNA-Console.exe")) { throw "KRISHNA-Console.exe missing" }
           $size=(Get-Item "dist/KRISHNA.exe").Length
           if ($size -lt 1000000) { throw "KRISHNA.exe unexpectedly small" }
           Write-Host "KRISHNA.exe bytes: $size"
+          $commands = "/status`n/chats`n/engines`n/exit`n"
+          $commands | & .\dist\KRISHNA-Console.exe *> krishna-console-smoke.txt
+          $output = Get-Content krishna-console-smoke.txt -Raw
+          Write-Host $output
+          if ($output -notmatch "Core connected") { throw "KRISHNA Core did not auto-start inside EXE" }
+          if ($output -notmatch '"core": "ONLINE"') { throw "KRISHNA /status did not report Core ONLINE" }
+          if ($output -notmatch 'persistent_project_chats') { throw "KRISHNA project-chat engine missing" }
+          if ($output -notmatch 'chromium_ui_inspection') { throw "KRISHNA browser engine missing" }
+          if ($output -notmatch 'github_repository_research') { throw "KRISHNA research engine missing" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: KRISHNA-Windows-Console
-          path: dist/KRISHNA.exe
+          name: KRISHNA-Windows-App
+          path: |
+            dist/KRISHNA.exe
+            dist/KRISHNA-Console.exe
