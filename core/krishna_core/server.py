@@ -5,45 +5,183 @@ from .config import settings
 from .orchestrator import Orchestrator
 from .watcher import Watcher
 
-orch=Orchestrator(); watcher=Watcher(); watcher.start()
-started=time.time()
-activity={"current_activity":"Idle","updated":time.strftime("%Y-%m-%d %H:%M:%S"),"recent":[]}
-DASHBOARD=(Path(__file__).resolve().parents[1]/"dashboard.html")
+orch = Orchestrator()
+started = time.time()
+activity = {"current_activity": "Idle", "updated": time.strftime("%Y-%m-%d %H:%M:%S"), "recent": []}
+DASHBOARD = (Path(__file__).resolve().parents[1] / "dashboard.html")
 
 def mark(event, detail=""):
-    now=time.strftime("%H:%M:%S")
-    activity["current_activity"]=detail or event
-    activity["updated"]=time.strftime("%Y-%m-%d %H:%M:%S")
-    activity["recent"].insert(0,{"time":now,"event":event+((": "+detail) if detail else "")})
+    now = time.strftime("%H:%M:%S")
+    activity["current_activity"] = detail or event
+    activity["updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    activity["recent"].insert(0, {"time": now, "event": event + ((": " + detail) if detail else "")})
     del activity["recent"][30:]
+
+def on_transition(transition):
+    target = transition["target"]
+    status = "UP" if transition["to"] else "DOWN"
+    mark("WATCHER TRANSITION", f"{target} -> {status}")
+    orch.memory.remember("system", "watcher_transition", f"{target} -> {status}", transition)
+    orch.memory.audit("watcher", "transition", json.dumps(transition))
+
+watcher = Watcher(on_transition=on_transition)
+watcher.start()
 
 class Handler(BaseHTTPRequestHandler):
     def _json(self, code, obj):
-        b=json.dumps(obj).encode(); self.send_response(code); self.send_header("Content-Type","application/json"); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
-    def _html(self, code, text):
-        b=text.encode(); self.send_response(code); self.send_header("Content-Type","text/html; charset=utf-8"); self.send_header("Cache-Control","no-store"); self.send_header("Content-Length",str(len(b))); self.end_headers(); self.wfile.write(b)
-    def do_GET(self):
-        if self.path in ("/","/dashboard"): return self._html(200,DASHBOARD.read_text(encoding="utf-8"))
-        if self.path=="/health": return self._json(200,{"ok":True,"watcher":watcher.state,"uptime_seconds":int(time.time()-started)})
-        if self.path=="/api/dashboard":
-            ws=watcher.state
-            return self._json(200,{"active":True,"core":"ONLINE","watcher":str(ws),"current_activity":activity["current_activity"],"updated":activity["updated"],"recent":activity["recent"],"uptime_seconds":int(time.time()-started)})
-        return self._json(404,{"error":"not found"})
-    def do_POST(self):
-        n=int(self.headers.get("Content-Length","0")); data=json.loads(self.rfile.read(n) or b"{}")
-        if self.path in ("/v1/chat","/api/core/chat"):
-            msg=data.get("message",""); mark("REQUEST RECEIVED",msg[:120])
-            try:
-                mark("KRISHNA WORKING","Processing request")
-                out=orch.handle(msg,data.get("project","general"))
-                mark("REQUEST COMPLETE","Response verified by Core")
-                activity["current_activity"]="Idle"
-                return self._json(200,out)
-            except Exception as e:
-                mark("ERROR",str(e)[:160]); activity["current_activity"]="Error"; return self._json(500,{"error":str(e)})
-        return self._json(404,{"error":"not found"})
-    def log_message(self, fmt, *args): pass
+        b = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
 
-if __name__=="__main__":
+    def _html(self, code, text):
+        b = text.encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
+    def _body(self):
+        n = int(self.headers.get("Content-Length", "0"))
+        return json.loads(self.rfile.read(n) or b"{}")
+
+    def do_GET(self):
+        if self.path in ("/", "/dashboard"):
+            return self._html(200, DASHBOARD.read_text(encoding="utf-8"))
+        if self.path == "/health":
+            return self._json(200, {
+                "ok": True,
+                "watcher": watcher.snapshot(),
+                "uptime_seconds": int(time.time() - started),
+            })
+        if self.path == "/api/dashboard":
+            return self._json(200, {
+                "active": True,
+                "core": "ONLINE",
+                "watcher": watcher.snapshot(),
+                "current_activity": activity["current_activity"],
+                "updated": activity["updated"],
+                "recent": activity["recent"],
+                "uptime_seconds": int(time.time() - started),
+            })
+        if self.path == "/api/capabilities":
+            return self._json(200, {
+                "operating_loop": [
+                    "observe", "understand", "investigate", "research",
+                    "plan", "act", "test", "verify", "learn"
+                ],
+                "capabilities": [
+                    "project_graph",
+                    "evidence_engine",
+                    "hypothesis_investigation",
+                    "persistent_incident_memory",
+                    "knowledge_ingestion",
+                    "verification_gates",
+                    "recovery_ladder",
+                    "defensive_security_scan",
+                    "watcher_transitions",
+                    "local_cloud_model_routing",
+                ],
+                "mutating_actions_enabled": settings.allow_actions,
+            })
+        if self.path == "/api/project-graph":
+            return self._json(200, orch.graph.snapshot())
+        if self.path == "/api/recovery/ladder":
+            return self._json(200, {"steps": orch.recovery.ladder()})
+        if self.path.startswith("/api/incidents"):
+            project = None
+            if "?project=" in self.path:
+                project = self.path.split("?project=", 1)[1].split("&", 1)[0]
+            return self._json(200, {"incidents": orch.memory.incidents(project, 50)})
+        return self._json(404, {"error": "not found"})
+
+    def do_POST(self):
+        try:
+            data = self._body()
+        except Exception as exc:
+            return self._json(400, {"error": f"invalid json: {exc}"})
+
+        if self.path in ("/v1/chat", "/api/core/chat"):
+            msg = data.get("message", "")
+            mark("REQUEST RECEIVED", msg[:120])
+            try:
+                mark("KRISHNA WORKING", "Processing request")
+                out = orch.handle(msg, data.get("project", "general"))
+                mark("REQUEST COMPLETE", "Response generated by Core")
+                activity["current_activity"] = "Idle"
+                return self._json(200, out)
+            except Exception as exc:
+                mark("ERROR", str(exc)[:160])
+                activity["current_activity"] = "Error"
+                return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/investigate":
+            symptom = str(data.get("symptom", "")).strip()
+            if not symptom:
+                return self._json(400, {"error": "symptom is required"})
+            project = str(data.get("project", "general"))
+            components = data.get("components") or []
+            mark("INVESTIGATING", symptom[:120])
+            try:
+                out = orch.investigate(symptom, project, components)
+                mark("EVIDENCE COLLECTED", out["investigation_id"])
+                activity["current_activity"] = "Idle"
+                return self._json(200, out)
+            except Exception as exc:
+                mark("INVESTIGATION ERROR", str(exc)[:160])
+                return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/knowledge/ingest":
+            project = str(data.get("project", "general"))
+            source = str(data.get("source", "manual"))
+            text = str(data.get("text", ""))
+            if not text.strip():
+                return self._json(400, {"error": "text is required"})
+            result = orch.ingest_knowledge(project, source, text, data.get("metadata"))
+            return self._json(200, result)
+
+        if self.path == "/api/project-graph/node":
+            name = str(data.get("name", "")).strip()
+            if not name:
+                return self._json(400, {"error": "name is required"})
+            orch.graph.upsert_node(name, str(data.get("kind", "component")), data.get("metadata") or {})
+            return self._json(200, {"ok": True})
+
+        if self.path == "/api/project-graph/link":
+            source = str(data.get("source", "")).strip()
+            target = str(data.get("target", "")).strip()
+            if not source or not target:
+                return self._json(400, {"error": "source and target are required"})
+            orch.graph.link(source, target, str(data.get("relation", "depends_on")))
+            return self._json(200, {"ok": True})
+
+        if self.path == "/api/security/scan-text":
+            path = str(data.get("path", "submitted-text"))
+            text = str(data.get("text", ""))
+            return self._json(200, {
+                "authorized_defensive_scan": True,
+                "findings": orch.security.scan_text(path, text),
+            })
+
+        if self.path == "/api/recovery/execute":
+            step = str(data.get("step", "")).strip()
+            if not step:
+                return self._json(400, {"error": "step is required"})
+            try:
+                return self._json(200, orch.recovery.execute(step, data.get("payload") or {}))
+            except KeyError:
+                return self._json(404, {"error": "unknown recovery step"})
+
+        return self._json(404, {"error": "not found"})
+
+    def log_message(self, fmt, *args):
+        pass
+
+if __name__ == "__main__":
     print(f"KRISHNA Core: http://127.0.0.1:{settings.port}/dashboard")
-    ThreadingHTTPServer((settings.host,settings.port),Handler).serve_forever()
+    ThreadingHTTPServer((settings.host, settings.port), Handler).serve_forever()
