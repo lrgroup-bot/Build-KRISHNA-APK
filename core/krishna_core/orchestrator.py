@@ -196,8 +196,25 @@ class Orchestrator:
     def prepare_promotion(self, project, candidate_root, task_id=None):
         policy=self.projects.get(project)
         if not policy: raise KeyError(project)
+        if not candidate_root: raise ValueError("verified candidate_root is required")
         candidate=Path(candidate_root).resolve()
-        if not candidate.is_dir(): raise ValueError("candidate_root must be a directory")
+        controlled=(Path(self.db_path).resolve().parent/".krishna_state"/"promotion-candidates").resolve()
+        try:
+            candidate.relative_to(controlled)
+        except ValueError as exc:
+            raise PermissionError("promotion candidate is outside KRISHNA controlled staging") from exc
+        if candidate == controlled or not candidate.is_dir():
+            raise ValueError("candidate_root must be a staged candidate directory")
+        if candidate.is_symlink():
+            raise PermissionError("symlink promotion candidates are not allowed")
+        file_count=0; total_bytes=0
+        for p in candidate.rglob("*"):
+            if p.is_symlink():
+                raise PermissionError("symlinks inside promotion candidates are not allowed")
+            if p.is_file():
+                file_count+=1; total_bytes+=p.stat().st_size
+                if file_count>10000 or total_bytes>512*1024*1024:
+                    raise ValueError("promotion candidate exceeds safety limits")
         delta=self.promotions.diff(policy.root,candidate)
         token=str(uuid.uuid4())
         self._promotion_candidates[token]={"project":project,"candidate_root":str(candidate),"task_id":task_id,"diff":delta}
