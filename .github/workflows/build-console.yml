@@ -5,10 +5,12 @@ on:
     branches:
       - feature/autonomous-browser-research
       - fix/krishna-exe-core-start
+      - feature/mobile-pc-control-safe-patch
       - main
     paths:
       - 'core/**'
       - 'avatar/**'
+      - 'scripts/**'
       - '.github/workflows/build-console.yml'
   workflow_dispatch:
 
@@ -28,11 +30,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller playwright
 
-      - name: Compile Python sources
+      - name: Compile sources
         shell: pwsh
         run: |
           python -m py_compile core/krishna_console.py core/krishna_desktop.py
           python -m compileall -q core/krishna_core
+          [void][scriptblock]::Create((Get-Content scripts/PATCH_KRISHNA_V3.ps1 -Raw))
+          [void][scriptblock]::Create((Get-Content scripts/START_KRISHNA.ps1 -Raw))
+          Write-Host "PowerShell scripts parsed successfully"
 
       - name: Build KRISHNA desktop app
         shell: pwsh
@@ -58,6 +63,25 @@ jobs:
             --add-data "avatar/krishna_child_360.webp.b64;avatar" `
             core/krishna_console.py
 
+      - name: Verify safe v3 patch preserves protected data
+        shell: pwsh
+        run: |
+          $pkg=(Get-Location).Path
+          $target=Join-Path $env:RUNNER_TEMP "KRISHNA-v3-test"
+          New-Item -ItemType Directory -Force -Path (Join-Path $target "core") | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $target "certificates") | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $target "state") | Out-Null
+          Set-Content -LiteralPath (Join-Path $target "krishna.glb") -Value "KEEP-GLB"
+          Set-Content -LiteralPath (Join-Path $target "core\krishna.py") -Value "KEEP-KRISHNA-PY"
+          Set-Content -LiteralPath (Join-Path $target "certificates\owner.cer") -Value "KEEP-CERT"
+          Set-Content -LiteralPath (Join-Path $target "state\owner.json") -Value "KEEP-STATE"
+          & .\scripts\PATCH_KRISHNA_V3.ps1 -PackageRoot $pkg -TargetRoot $target
+          if ((Get-Content (Join-Path $target "krishna.glb") -Raw).Trim() -ne "KEEP-GLB") { throw "krishna.glb changed" }
+          if ((Get-Content (Join-Path $target "core\krishna.py") -Raw).Trim() -ne "KEEP-KRISHNA-PY") { throw "core\krishna.py changed" }
+          if ((Get-Content (Join-Path $target "certificates\owner.cer") -Raw).Trim() -ne "KEEP-CERT") { throw "certificate changed" }
+          if ((Get-Content (Join-Path $target "state\owner.json") -Raw).Trim() -ne "KEEP-STATE") { throw "state changed" }
+          if (!(Test-Path (Join-Path $target "core\krishna_console.py"))) { throw "missing v3 runtime was not installed" }
+
       - name: Live smoke test bundled Core
         shell: pwsh
         run: |
@@ -82,3 +106,5 @@ jobs:
           path: |
             dist/KRISHNA.exe
             dist/KRISHNA-Console.exe
+            scripts/PATCH_KRISHNA_V3.ps1
+            scripts/START_KRISHNA.ps1

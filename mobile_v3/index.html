@@ -3,7 +3,7 @@
 <style>
 *{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#020914;color:#e9fbff;font-family:Arial,sans-serif}
 .app{height:100%;display:flex;flex-direction:column;background:radial-gradient(circle at 50% 35%,#123e66aa,transparent 36%),linear-gradient(#061726,#020914)}
-header{text-align:center;padding:16px 12px 7px}.brand{letter-spacing:7px;color:#f2c96f;font-size:22px;font-weight:900}.state{font-size:10px;color:#82a8b9;letter-spacing:2px;margin-top:7px}
+header{position:relative;text-align:center;padding:16px 12px 7px}.brand{letter-spacing:7px;color:#f2c96f;font-size:22px;font-weight:900}.state{font-size:10px;color:#82a8b9;letter-spacing:2px;margin-top:7px}.workspaceBtn{position:absolute;left:12px;top:14px;border:1px solid #2c88ae;background:#061829;color:#dffaff;border-radius:12px;padding:7px 9px;font-size:10px;max-width:34vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sheet{position:fixed;inset:0;z-index:50;background:#0008;display:none;align-items:flex-end}.sheet.show{display:flex}.sheetCard{width:100%;max-height:72vh;overflow:auto;background:#07111d;border-top:1px solid #2c88ae;border-radius:22px 22px 0 0;padding:16px}.sheet h3{margin:0 0 12px}.sheet .row{display:flex;gap:8px;margin:8px 0}.sheet select,.sheet input{flex:1;background:#0b1c2b;color:#fff;border:1px solid #2c88ae;border-radius:10px;padding:11px}.sheet button{background:#0d5d74;color:#fff;border:0;border-radius:10px;padding:11px 13px}.toolGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.toolGrid button{background:#10283a}
 .stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none;overflow:hidden}
 .halo{position:absolute;width:min(68vw,330px);aspect-ratio:1;border:2px solid #f2c96f88;border-radius:50%;box-shadow:0 0 45px #43bff255,inset 0 0 35px #43bff222}
 .avatarViewport{position:relative;height:min(59vh,560px);aspect-ratio:1/3;overflow:hidden;z-index:2;filter:drop-shadow(0 16px 22px #000a);user-select:none}
@@ -16,7 +16,7 @@ header{text-align:center;padding:16px 12px 7px}.brand{letter-spacing:7px;color:#
 .composer{display:flex;gap:8px;background:#041623;border:1px solid #1d7998;border-radius:18px;padding:7px}.composer input{flex:1;min-width:0;background:transparent;color:#fff;border:0;outline:0;padding:10px}.composer button{width:45px;border-radius:50%;border:1px solid #40dff4;background:#073148;color:#bdf9ff}.good{color:#50f0ac}.bad{color:#ff7189}
 </style></head>
 <body><div class="app">
-<header><div class="brand">KRISHNA</div><div id="state" class="state">CONNECTING</div></header>
+<header><button id="workspaceBtn" class="workspaceBtn" onclick="openWorkspace()">GENERAL</button><div class="brand">KRISHNA</div><div id="state" class="state">CONNECTING</div></header>
 <section id="stage" class="stage">
   <div class="halo"></div>
   <div id="rotateHint" class="rotateHint">SWIPE TO ROTATE · 360°</div>
@@ -28,7 +28,56 @@ header{text-align:center;padding:16px 12px 7px}.brand{letter-spacing:7px;color:#
 </section>
 <footer class="bottom"><div id="reply" class="reply">Talk to KRISHNA.</div><div class="composer"><input id="msg" placeholder="Talk to KRISHNA…" onkeydown="if(event.key==='Enter')send()"><button onclick="listen()">🎙</button><button onclick="send()">➤</button></div></footer>
 </div>
+<div id="workspaceSheet" class="sheet" onclick="if(event.target===this)closeWorkspace()">
+  <div class="sheetCard">
+    <h3>KRISHNA Workspace</h3>
+    <div class="row"><select id="projectSelect" onchange="projectChanged()"></select></div>
+    <div class="row"><select id="chatSelect" onchange="chatChanged()"></select><button onclick="createChat()">+ Chat</button></div>
+    <div class="toolGrid">
+      <button onclick="runTool('status')">PC Status</button>
+      <button onclick="runTool('index')">Index Project</button>
+      <button onclick="promptTool('investigate','Describe the problem','symptom')">Investigate</button>
+      <button onclick="promptTool('research_github','What should KRISHNA research?','query')">GitHub Research</button>
+      <button onclick="promptTool('inspect_ui','UI URL to inspect','url')">Inspect UI</button>
+      <button onclick="runTool('engines')">Core Engines</button>
+    </div>
+    <div class="row"><button style="width:100%" onclick="closeWorkspace()">Done</button></div>
+  </div>
+</div>
 <script>
+
+function ws(){try{return JSON.parse(Krishna.workspace())}catch(e){return {project:'general',chat_id:''}}}
+function openWorkspace(){document.getElementById('workspaceSheet').classList.add('show');loadProjects()}
+function closeWorkspace(){document.getElementById('workspaceSheet').classList.remove('show')}
+function loadProjects(){
+  try{
+    const current=ws(),d=JSON.parse(Krishna.projects()),items=[{name:'general'},...((d.projects||[]).filter(x=>x.name!=='general'))];
+    const s=document.getElementById('projectSelect');s.innerHTML='';
+    items.forEach(x=>{const o=document.createElement('option');o.value=x.name;o.textContent=x.name;if(x.name===current.project)o.selected=true;s.appendChild(o)});
+    loadChats(s.value,current.chat_id);
+  }catch(e){document.getElementById('reply').textContent='Workspace: '+e.message}
+}
+function loadChats(project,preferred){
+  try{
+    const d=JSON.parse(Krishna.chats(project)),s=document.getElementById('chatSelect');s.innerHTML='';
+    (d.chats||[]).forEach(x=>{const o=document.createElement('option');o.value=x.chat_id;o.textContent=x.title||'Chat';if(x.chat_id===preferred)o.selected=true;s.appendChild(o)});
+    if(!s.value){const n=JSON.parse(Krishna.newChat(project,'Mobile chat'));if(n.chat_id){const o=document.createElement('option');o.value=n.chat_id;o.textContent=n.title||'Mobile chat';o.selected=true;s.appendChild(o)}}
+    Krishna.setWorkspace(project,s.value||'');updateWorkspaceLabel();
+  }catch(e){document.getElementById('reply').textContent='Chats: '+e.message}
+}
+function projectChanged(){const p=document.getElementById('projectSelect').value;loadChats(p,'')}
+function chatChanged(){Krishna.setWorkspace(document.getElementById('projectSelect').value,document.getElementById('chatSelect').value);updateWorkspaceLabel()}
+function createChat(){
+  const p=document.getElementById('projectSelect').value,title=prompt('Chat title','New chat');if(!title)return;
+  try{const d=JSON.parse(Krishna.newChat(p,title));if(d.error)throw new Error(d.error);loadChats(p,d.chat_id)}catch(e){document.getElementById('reply').textContent='New chat: '+e.message}
+}
+function updateWorkspaceLabel(){const w=ws(),b=document.getElementById('workspaceBtn');b.textContent=(w.project||'general').toUpperCase()}
+function runTool(action,payload={}){
+  setMode('WORKING','KRISHNA PC is working…');
+  setTimeout(()=>{try{const d=JSON.parse(Krishna.control(action,JSON.stringify(payload)));if(d.error)throw new Error(typeof d.error==='string'?d.error:JSON.stringify(d.error));document.getElementById('reply').textContent=JSON.stringify(d,null,2);setMode('CHAT','Completed on PC')}catch(e){document.getElementById('reply').textContent='PC control: '+e.message;setMode('CHAT','Control error')}},20)
+}
+function promptTool(action,label,key){const v=prompt(label,'');if(!v)return;const p={};p[key]=v;runTool(action,p)}
+
 const labels=['FRONT','FRONT-RIGHT','RIGHT','BACK-RIGHT','BACK','BACK-LEFT','LEFT','FRONT-LEFT'];
 let view=0,drag=false,startX=0,startView=0,mode='FLUTE',lastManual=0,autoTimer=null;
 const stage=document.getElementById('stage'),sprite=document.getElementById('avatarSprite'),label=document.getElementById('viewLabel'),vp=document.getElementById('avatarViewport');
@@ -50,5 +99,5 @@ window.send=()=>{const i=document.getElementById('msg'),q=i.value.trim();if(!q)r
 window.listen=()=>{if(!Krishna.voiceEnrolled()){document.getElementById('reply').textContent='Speak naturally for a few seconds to register the local owner voice profile.';setTimeout(()=>{const d=JSON.parse(Krishna.enrollVoice());document.getElementById('reply').textContent=d.error||'Voice profile registered locally. Tap the microphone again.'},100);return}if(!('webkitSpeechRecognition'in window)){document.getElementById('reply').textContent='Speech recognition unavailable; type your request.';return}const r=new webkitSpeechRecognition();r.lang='or-IN';r.interimResults=true;r.onstart=()=>setMode('CHAT','LISTENING');r.onresult=e=>{let t='';for(let k=e.resultIndex;k<e.results.length;k++)t+=e.results[k][0].transcript;document.getElementById('reply').textContent=t;if(e.results[e.results.length-1].isFinal){document.getElementById('msg').value=t.replace(/^krishna[ ,]*/i,'');send()}};r.onerror=e=>document.getElementById('reply').textContent='Voice: '+e.error;r.start()}
 function speak(t){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang=/[\u0B00-\u0B7F]/.test(t)?'or-IN':'en-IN';speechSynthesis.speak(u)}catch(e){}}
 function poll(){try{const link=JSON.parse(Krishna.connection());if(link.error||!link.connected)throw new Error(link.error||'Backend link not confirmed');const d=JSON.parse(Krishna.state());if(d.error)throw new Error(d.error);setMode(d.operator?.avatar_state||'FLUTE',d.operator?.current?.task||'Radhe Radhe. I am ready.');document.getElementById('state').className='state good'}catch(e){document.getElementById('state').textContent='PC OFFLINE';document.getElementById('state').className='state bad'}}
-showView(0);startAuto();poll();setInterval(poll,5000);window.onerror=(m,s,l)=>{try{Krishna.log('JS '+m+' '+s+':'+l)}catch(e){}};
+updateWorkspaceLabel();showView(0);startAuto();poll();setInterval(poll,5000);window.onerror=(m,s,l)=>{try{Krishna.log('JS '+m+' '+s+':'+l)}catch(e){}};
 </script></body></html>
