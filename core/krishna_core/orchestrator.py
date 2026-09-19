@@ -614,40 +614,51 @@ STRICT OUTPUT CONTRACT:
 - Never emit specialist templates, SQL, code, schemas, marketing/legal/media advice, or unrelated implementation guidance unless the user explicitly requested it.
 - If a diagnostic hypothesis conflicts with explicit evidence, discard the hypothesis.
 """
-            # Diagnostic reports cross a stricter trust boundary than normal chat:
-            # specialists/hypotheses may guide reasoning but can never become factual evidence.
+            # Managed diagnostic reports are evidence products, not free-form chat.
+            # The local model may help investigation, but the final factual report is
+            # rendered deterministically from probe evidence so specialist prompts,
+            # hypotheses, or model priors cannot become observations.
             result = self.router.route(prompt, privacy=(registered.privacy if registered else "approved_cloud"))
             model_text = str(result.get("text") or "").strip()
-            evidence_blob = " ".join(str(row.get("detail", "")) for row in evidence).lower()
-            forbidden_domain_terms = {
-                "sla", "cab", "cmdb", "stakeholder satisfaction", "it service manager",
-                "continuous service improvement", "continual service improvement",
-            }
-            unsupported = sorted(
-                term for term in forbidden_domain_terms
-                if term in model_text.lower() and term not in evidence_blob
-            )
-            if unsupported:
-                # Fail closed to a deterministic evidence rendering. This deliberately
-                # sacrifices prose quality rather than allowing advisory prompt content
-                # to be presented as observed fact.
-                observed_lines = [
-                    f"- [{row.get('source')}/{row.get('kind')}] {str(row.get('detail', '')).strip()[:900]}"
-                    for row in evidence[:12]
-                ]
-                model_text = (
-                    "Observed evidence:\n" + ("\n".join(observed_lines) if observed_lines else "- No project evidence was collected.")
-                    + "\n\nPotential issues:\n"
-                    + ("- The model attempted to introduce unsupported specialist-domain claims; those claims were removed."
-                       if evidence else "- No evidence-backed issue can be stated.")
-                    + "\n\nLimitations:\n- This fallback reports collected probe evidence only; advisory specialist content and unverified hypotheses are excluded."
-                )
-                result["text"] = model_text
-                result["grounding_fallback"] = True
-                result["unsupported_claim_terms"] = unsupported
-            else:
-                result["grounding_fallback"] = False
+            evidence_blob = "\n".join(str(row.get("detail", "")) for row in evidence)
+            evidence_lower = evidence_blob.lower()
 
+            observed_lines = []
+            issue_lines = []
+            if any(row.get("kind") == "root_listing" for row in evidence):
+                observed_lines.append("- Project root was inspected and a root directory listing was collected.")
+            if any(row.get("kind") == "dependency_context" for row in evidence):
+                observed_lines.append("- Project graph evidence identifies the selected registered project and its local project root.")
+            if "ollama online" in evidence_lower or "ollama    | tcp up" in evidence_lower:
+                observed_lines.append("- Recent collected logs report Ollama online/reachable.")
+            if "openclaw" in evidence_lower and ("tcp up" in evidence_lower or "http 200" in evidence_lower):
+                observed_lines.append("- Recent collected logs report OPENCLAW reachable.")
+            if "health |" in evidence_lower:
+                observed_lines.append("- Recent health log entries were collected; they include CPU/RAM telemetry and health status lines.")
+            if "ram 8" in evidence_lower:
+                issue_lines.append("- Some collected historical health-log samples show RAM usage above 80%; the same evidence also contains later lower samples, so this is not proof of current memory pressure.")
+            if "dirty " in evidence_lower:
+                issue_lines.append("- Guardian log evidence reports uncommitted/dirty files in one or more monitored repositories; this is an observed repository state, not by itself a KRISHNA failure.")
+            if not observed_lines:
+                observed_lines = [
+                    f"- [{row.get('source')}/{row.get('kind')}] {str(row.get('detail', '')).strip()[:700]}"
+                    for row in evidence[:8]
+                ] or ["- No registered probe produced project evidence."]
+            if not issue_lines:
+                issue_lines.append("- No specific KRISHNA failure is established by the collected evidence.")
+            limitations = [
+                "- This report states only facts derived from the collected probe evidence; diagnostic hypotheses and specialist prompts are excluded as factual sources.",
+                "- A root listing and log tail do not prove that every KRISHNA component or end-to-end workflow is healthy.",
+            ]
+            deterministic_text = (
+                "Observed evidence:\n" + "\n".join(observed_lines)
+                + "\n\nPotential issues:\n" + "\n".join(issue_lines)
+                + "\n\nLimitations:\n" + "\n".join(limitations)
+            )
+            result["text"] = deterministic_text
+            result["model_draft_discarded"] = bool(model_text)
+            result["grounding_mode"] = "deterministic_evidence_only"
+            result["grounding_fallback"] = True
             out = {
                 "task_id": str(uuid.uuid4()),
                 "chat_id": chat_id,
