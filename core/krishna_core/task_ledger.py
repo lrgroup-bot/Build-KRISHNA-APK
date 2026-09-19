@@ -21,6 +21,15 @@ class TaskLedger:
         with self.lock:r=self.db.execute("SELECT task_id,project,goal,status,phase,detail,created_at,updated_at FROM task_ledger WHERE task_id=?",(task_id,)).fetchone()
         if not r:return None
         return {"task_id":r[0],"project":r[1],"goal":r[2],"status":r[3],"phase":r[4],"detail":json.loads(r[5]),"created_at":r[6],"updated_at":r[7]}
+    def list_tasks(self, project=None, limit=100):
+        with self.lock:
+            if project:
+                rows=self.db.execute("SELECT task_id FROM task_ledger WHERE project=? ORDER BY updated_at DESC LIMIT ?",(project,limit)).fetchall()
+            else:
+                rows=self.db.execute("SELECT task_id FROM task_ledger ORDER BY updated_at DESC LIMIT ?",(limit,)).fetchall()
+        return [self.get(x[0]) for x in rows]
+
     def active(self):
-        with self.lock:rows=self.db.execute("SELECT task_id FROM task_ledger WHERE status IN ('queued','running','verifying') ORDER BY created_at").fetchall()
+        with self.lock:
+            rows=self.db.execute("SELECT task_id FROM task_ledger WHERE status IN ('queued','running','verifying','waiting_approval') ORDER BY created_at").fetchall()
         return [self.get(x[0]) for x in rows]
