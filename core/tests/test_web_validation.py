@@ -12,9 +12,13 @@ class WebValidationTests(unittest.TestCase):
         ):
             self.assertIn(endpoint, text)
         self.assertIn("Run full web check", text)
-        self.assertIn("Vishwakarma", text)
-        self.assertIn("Karma", text)
+        # KRISHNA is the sole public identity. Internal work engines are
+        # intentionally selected by Core rather than exposed as manual modes.
+        self.assertIn("Talk to KRISHNA", text)
+        self.assertIn("Conversation", text)
         self.assertIn("Work progress", text)
+        self.assertNotIn("Karma · Work", text)
+        self.assertNotIn("Vishwakarma · Code", text)
 
     def test_server_exposes_validation_route(self):
         root = Path(__file__).resolve().parents[1]
