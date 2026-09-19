@@ -273,6 +273,74 @@ class Orchestrator:
     def register_action(self, project, name, fn, mutating=False, description=""):
         return self.actions.register(project, name, fn, mutating=mutating, description=description)
 
+    def register_e2e_test_harness(self, project):
+        """Register bounded mutation probes for a disposable, explicitly marked project.
+
+        This never accepts shell commands or arbitrary paths. The actions can only
+        write fixed test files inside the shadow workspace supplied by RepairAgent.
+        A live project must opt in with both metadata and an exact marker file.
+        """
+        policy = self.projects.get(project)
+        if not policy:
+            raise KeyError(project)
+        root = Path(policy.root).resolve()
+        marker = root / ".krishna-e2e-disposable"
+        if not bool(policy.metadata.get("e2e_test_harness")):
+            raise PermissionError("project metadata e2e_test_harness=true is required")
+        if not marker.is_file() or marker.read_text(encoding="utf-8").strip() != "KRISHNA_E2E_DISPOSABLE":
+            raise PermissionError("exact .krishna-e2e-disposable marker is required")
+
+        success_action = "e2e_write_success"
+        rollback_action = "e2e_write_rollback_probe"
+        check_name = "e2e_marker_verified"
+        required_actions = {success_action, rollback_action}
+        if not required_actions.issubset(set(policy.allowed_actions)):
+            raise PermissionError("project policy must allow both bounded e2e actions")
+        if check_name not in set(policy.verification_checks):
+            raise PermissionError("project policy must require e2e_marker_verified")
+
+        def write_success(payload):
+            workspace = Path(payload["workspace"]).resolve()
+            (workspace / "e2e-result.txt").write_text("KRISHNA_E2E_PROMOTED\n", encoding="utf-8")
+            flag = workspace / ".krishna-e2e-force-post-fail"
+            if flag.exists():
+                flag.unlink()
+            return {"ok": True, "probe": "success"}
+
+        def write_rollback_probe(payload):
+            workspace = Path(payload["workspace"]).resolve()
+            (workspace / "e2e-result.txt").write_text("KRISHNA_E2E_ROLLBACK_PROBE\n", encoding="utf-8")
+            (workspace / ".krishna-e2e-force-post-fail").write_text("FORCE_POST_VERIFY_FAIL\n", encoding="utf-8")
+            return {"ok": True, "probe": "rollback"}
+
+        def verify(workspace):
+            workspace = Path(workspace).resolve()
+            result_file = workspace / "e2e-result.txt"
+            if not result_file.is_file():
+                return False, "e2e-result.txt missing"
+            value = result_file.read_text(encoding="utf-8").strip()
+            if value not in {"KRISHNA_E2E_PROMOTED", "KRISHNA_E2E_ROLLBACK_PROBE"}:
+                return False, "unexpected e2e result"
+            # The rollback probe deliberately passes in shadow but fails after the
+            # candidate reaches the registered live root, exercising rollback.
+            if workspace == root and (workspace / ".krishna-e2e-force-post-fail").exists():
+                return False, "intentional post-promotion verification failure"
+            return True, "bounded e2e marker verified"
+
+        self.register_action(project, success_action, write_success, mutating=True,
+                             description="Bounded disposable-project promotion probe")
+        self.register_action(project, rollback_action, write_rollback_probe, mutating=True,
+                             description="Bounded disposable-project rollback probe")
+        self.register_verification_check(project, check_name, verify)
+        self.memory.audit("e2e_harness", "registered", project)
+        return {
+            "project": project,
+            "registered": True,
+            "actions": [success_action, rollback_action],
+            "verification_check": check_name,
+            "disposable_only": True,
+        }
+
     def _project_context(self, project):
         item = self.projects.get(project)
         if not item:
