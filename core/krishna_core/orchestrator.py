@@ -391,17 +391,24 @@ class Orchestrator:
         self.evidence.register_probe(name, LocalEvidenceCollectors.endpoint_probe(url, timeout))
 
     def _ai_hypotheses(self, symptom, evidence, context):
+        """Build conservative hypotheses without turning model prose into facts.
+
+        The model may suggest investigation directions, but every returned statement
+        is labelled as a possibility and may reference only evidence sources that
+        were actually collected. Claims of success, health, correctness, completion,
+        or absence of errors are rejected because probe presence does not prove them.
+        """
         evidence_text = "\n".join(
             f"- [{e.source}/{e.kind}] {e.detail[:1800]}" for e in evidence
         ) or "- no evidence collected"
-        prompt = f"""You are KRISHNA's diagnostic reasoner.
-Produce at most 5 concise root-cause hypotheses for an authorized software project.
-Every hypothesis must be directly supported by the supplied evidence. Do not convert warnings, informational messages,
-or successful initialization messages into failures. Preserve explicit negation and status words such as "initialized",
-"complete", "not configured", "warning", and "error". If evidence is ambiguous, say that it is ambiguous.
-Do not propose exploitation. Do not claim a cause is proven.
-Return one hypothesis per line as: confidence|statement
-Confidence is 0.00-1.00. Use confidence above 0.80 only when explicit evidence strongly supports the statement.
+        prompt = f"""You are KRISHNA's diagnostic hypothesis generator.
+Generate at most 5 POSSIBLE investigation directions, not factual conclusions.
+Use only the supplied evidence. Never claim that a project is healthy, correct, operational,
+configured correctly, complete, successful, error-free, ready, or that an action ran unless
+the evidence explicitly records that exact event. Absence of an error is not evidence of success.
+Do not infer repetition, chronology, causation, or component presence from a root listing.
+Return one line as: confidence|possible: <statement>
+Confidence must be 0.00-0.70. These remain untested until a verification check proves them.
 
 Project: {context.get('project', 'general')}
 Symptom: {symptom}
@@ -412,16 +419,27 @@ Evidence:
             result = self.router.route(prompt, privacy=context.get("privacy", "local_only"))
             parsed = []
             sources = sorted({e.source for e in evidence})
+            forbidden = (
+                "configured correctly", "correctly configured", "completed successfully",
+                "successfully run", "successfully executed", "operational", "functioning as expected",
+                "without errors", "no errors", "no issues", "healthy", "ready for use",
+                "all necessary components", "proper configuration", "multiple successful",
+            )
             for raw in result["text"].splitlines():
                 if "|" not in raw:
                     continue
                 left, statement = raw.split("|", 1)
                 try:
-                    confidence = min(1.0, max(0.0, float(left.strip())))
+                    confidence = min(0.70, max(0.0, float(left.strip())))
                 except ValueError:
                     continue
                 statement = statement.strip(" -\t")
+                lowered = statement.lower()
+                if any(term in lowered for term in forbidden):
+                    continue
                 if statement:
+                    if not lowered.startswith(("possible:", "possibility:", "investigate:", "check:")):
+                        statement = "possible: " + statement
                     parsed.append(Hypothesis(statement, confidence, supporting_sources=sources))
             if parsed:
                 return parsed[:5]
