@@ -101,6 +101,19 @@ class Orchestrator:
             except Exception:
                 continue
 
+    def unregister_project(self, name):
+        name = str(name or "").strip()
+        if not name:
+            raise ValueError("project name is required")
+        if name == "KRISHNA":
+            raise PermissionError("the primary KRISHNA project cannot be unregistered")
+        if not self.projects.get(name):
+            raise KeyError(name)
+        self.memory.delete_project(name)
+        self.projects.unregister(name)
+        self.memory.audit("project_unregister", "completed", name)
+        return {"name": name, "removed": True}
+
     def run_managed_goal(self, project, goal, action_name=None, components=None, approved=False):
         """Run a bounded managed-work transaction.
 
