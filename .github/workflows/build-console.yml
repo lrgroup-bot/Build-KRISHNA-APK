@@ -99,6 +99,7 @@ jobs:
           if ($output -notmatch 'persistent_project_chats') { throw "KRISHNA project-chat engine missing" }
           if ($output -notmatch 'chromium_ui_inspection') { throw "KRISHNA browser engine missing" }
           if ($output -notmatch 'github_repository_research') { throw "KRISHNA research engine missing" }
+          $env:PYTHONPATH = (Join-Path (Get-Location) "core")
           python -m unittest discover -s core/tests -p "test_*.py"
 
       - uses: actions/upload-artifact@v4
