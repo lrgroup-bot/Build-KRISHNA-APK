@@ -66,6 +66,7 @@ public class MainActivity extends Activity {
       }
     }
     @JavascriptInterface public String status(){ return call("/api/status",null); }
+    @JavascriptInterface public String connection(){ return call("/api/mobile/connection",null); }
     @JavascriptInterface public String event(String kind,String detail){
       return call("/api/core/event","{\"source\":\"mobile\",\"kind\":"+JSONObject.quote(kind)+",\"detail\":"+JSONObject.quote(detail)+",\"project\":\"system\"}");
     }

@@ -65,7 +65,7 @@ jobs:
 
           cat > app/src/main/res/xml/network_security_config.xml <<'EOF'
           <network-security-config>
-            <base-config cleartextTrafficPermitted="false">
+            <base-config cleartextTrafficPermitted="true">
               <trust-anchors>
                 <certificates src="system"/>
                 <certificates src="user"/>
@@ -87,7 +87,7 @@ jobs:
               android:theme="@style/AppTheme"
               android:label="KRISHNA"
               android:icon="@drawable/krishna_hud_v3"
-              android:usesCleartextTraffic="false"
+              android:usesCleartextTraffic="true"
               android:networkSecurityConfig="@xml/network_security_config">
               <activity android:name=".MainActivity" android:exported="true">
                 <intent-filter>
@@ -122,6 +122,8 @@ jobs:
           grep -q "avatarBase64" app/src/main/java/com/krishna/mobile/MainActivity.java
           grep -q "GLTFLoader" app/src/main/assets/index.html
           grep -q "setMode" app/src/main/assets/index.html
+          grep -q 'http://192.168.0.106:8766' app/src/main/java/com/krishna/mobile/MainActivity.java
+          grep -q 'android:usesCleartextTraffic="true"' app/src/main/AndroidManifest.xml
 
       - uses: actions/upload-artifact@v4
         with:
