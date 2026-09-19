@@ -27,12 +27,13 @@ $ShadowRoot = Join-Path $KrishnaRoot "shadow"
 $LogRoot = Join-Path $KrishnaRoot "logs"
 $NpmRoot = Join-Path $InstallRoot "npm"
 $PythonRoot = Join-Path $InstallRoot "python"
-$CbmRoot = Join-Path $InstallRoot "codebase-memory"
+$CbmRoot = "E:\KRISHNA-CBM"
 $CuaRoot = Join-Path $InstallRoot "cua"
 $AriseRoot = Join-Path $InstallRoot "ARISE"
 $GooseRoot = Join-Path $InstallRoot "goose"
 
-@($InstallRoot,$ConfigRoot,$RuntimeRoot,$ShadowRoot,$LogRoot,$NpmRoot,$PythonRoot,$CbmRoot,$CuaRoot,$AriseRoot,$GooseRoot) | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
+@($InstallRoot,$ConfigRoot,$RuntimeRoot,$ShadowRoot,$LogRoot,$NpmRoot,$PythonRoot,$CuaRoot,$AriseRoot,$GooseRoot) | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
+if (-not (Test-Path $CbmRoot)) { New-Item -ItemType Directory -Force -Path $CbmRoot | Out-Null }
 
 Write-Step "Checking prerequisites"
 if (-not (Has-Cmd "git")) { throw "Git is required." }
@@ -52,7 +53,7 @@ $AgentPython = Join-Path $AgentVenv "Scripts\python.exe"
 Run-Checked -Exe $AgentPython -Arguments @("-m","pip","install","--upgrade","pip")
 Run-Checked -Exe $AgentPython -Arguments @("-m","pip","install","--upgrade","mini-swe-agent","swe-rex")
 
-Write-Step "Hardening NTFS permissions for codebase-memory"
+Write-Step "Hardening dedicated NTFS location for codebase-memory"
 try {
   if (Test-Path $CbmRoot) {
     & icacls $CbmRoot /inheritance:r | Out-Null
