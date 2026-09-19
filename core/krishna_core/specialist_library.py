@@ -67,15 +67,24 @@ class SpecialistLibrary:
         return {"source_root":str(self.source_root) if self.source_root else None,"total":len(self.items),"divisions":counts,"specialists":[asdict(x) for x in sorted(self.items.values(),key=lambda z:(z.division,z.name.lower()))]}
 
     def select(self, task:str, limit:int=5):
-        words={w for w in re.findall(r"[a-z0-9+#.-]{3,}",task.lower())}
+        text=(task or "").lower()
+        words={w for w in re.findall(r"[a-z0-9+#.-]{3,}",text)}
+        stop={"this","that","with","from","only","real","project","use","appropriate","useful","modify","anything","report","actually","observed","identify","problems"}
+        words-=stop
+        diagnostic=any(p in text for p in ("health","problem","error","fail","debug","diagnos","inspect","check"))
         scored=[]
         for x in self.items.values():
-            hay=(x.name+" "+x.description+" "+x.division).lower()
-            score=sum(1 for w in words if w in hay)
-            if x.division=="testing": score+=1
-            if "code" in words and x.division=="engineering": score+=2
-            if score: scored.append((score,x))
-        scored.sort(key=lambda q:(-q[0],q[1].name))
+            hay=(" "+x.name+" "+x.description+" "+x.division+" ").lower()
+            exact=sum(2 for w in words if re.search(rf"(?<![a-z0-9]){re.escape(w)}(?![a-z0-9])",hay))
+            partial=sum(1 for w in words if len(w)>=5 and w in hay)
+            score=exact+partial
+            if diagnostic and x.division=="testing": score+=4
+            if diagnostic and x.division=="engineering": score+=2
+            if diagnostic and any(k in hay for k in ("debug","qa","reality","test","incident","devops","reliability","code reviewer")): score+=3
+            if diagnostic and x.division in {"paid-media","finance","sales","marketing"}: score-=6
+            if "code" in words and x.division=="engineering": score+=3
+            if score>=4: scored.append((score,x))
+        scored.sort(key=lambda q:(-q[0],q[1].division,q[1].name.lower()))
         return [asdict(x) for _,x in scored[:max(1,min(limit,8))]]
 
     def context(self, specialist_id:str, max_chars:int=14000):
