@@ -22,6 +22,7 @@ from krishna_core.github_research import GitHubResearchAgent
 from krishna_core.goal_evaluator import GoalEvaluator
 from krishna_core.skill_runtime import SkillRegistry, parse_skill_markdown
 from krishna_core.content_guard import assess_untrusted_content
+from krishna_core.orchestrator import Orchestrator
 
 
 class KrishnaCapabilityTests(unittest.TestCase):
@@ -297,6 +298,38 @@ class KrishnaCapabilityTests(unittest.TestCase):
         self.assertTrue(assessment.suspicious)
         self.assertTrue(assessment.indicators)
         self.assertIn("data only", assessment.instruction_policy)
+
+
+    def test_managed_read_only_investigation_completes_without_approval(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "project"
+            root.mkdir()
+            (root / "requirements.txt").write_text("example==1.0\n", encoding="utf-8")
+            orch = Orchestrator()
+            try:
+                orch.register_project("demo", str(root))
+                orch.router.route = lambda prompt, privacy="local_only": {
+                    "provider": "test", "text": "Observed evidence reported."
+                }
+                out = orch.handle_managed_request("Check project health. Do not modify anything.", "demo")
+                task = orch.task_ledger.get(out["managed_task_id"])
+                self.assertEqual("completed", task["status"])
+                self.assertEqual("report", task["phase"])
+                self.assertFalse(task["detail"]["mutation_performed"])
+                self.assertGreater(task["detail"]["evidence_count"], 0)
+                self.assertTrue(out["investigation"]["evidence"])
+            finally:
+                orch.task_ledger.close()
+                orch.memory.close()
+
+    def test_managed_unknown_named_project_is_not_inspected(self):
+        orch = Orchestrator()
+        try:
+            with self.assertRaises(KeyError):
+                orch.handle_managed_request("Check project health.", "not-registered")
+        finally:
+            orch.task_ledger.close()
+            orch.memory.close()
 
 
 if __name__ == "__main__":
