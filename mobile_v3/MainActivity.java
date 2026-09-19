@@ -1,6 +1,7 @@
 package com.krishna.mobile;
 
 import android.app.*;
+import androidx.core.app.NotificationCompat;
 import android.os.*;
 import android.content.*;
 import android.content.pm.PackageManager;
@@ -18,8 +19,30 @@ public class MainActivity extends Activity {
   WebView web;
   Bridge bridge;
 
+  static final String NOTIFY_CHANNEL="krishna_completed";
+  String deviceId(){
+    android.content.SharedPreferences p=getSharedPreferences("k",0);
+    String id=p.getString("device_id","");
+    if(id.isEmpty()){id="android-"+java.util.UUID.randomUUID();p.edit().putString("device_id",id).apply();}
+    return id;
+  }
+  void ensureNotifications(){
+    if(Build.VERSION.SDK_INT>=26){
+      NotificationManager n=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+      n.createNotificationChannel(new NotificationChannel(NOTIFY_CHANNEL,"KRISHNA completed work",NotificationManager.IMPORTANCE_DEFAULT));
+    }
+  }
+  void notifyCompleted(String text){
+    Notification.Builder b=Build.VERSION.SDK_INT>=26?new Notification.Builder(this,NOTIFY_CHANNEL):new Notification.Builder(this);
+    b.setSmallIcon(android.R.drawable.stat_notify_more).setContentTitle("KRISHNA completed work").setContentText(text).setAutoCancel(true);
+    ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify((int)(System.currentTimeMillis()&0x7fffffff),b.build());
+  }
+
   @Override public void onCreate(Bundle b){
     super.onCreate(b);
+    ensureNotifications();
+    if(Build.VERSION.SDK_INT>=33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS")!=PackageManager.PERMISSION_GRANTED)
+      requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"},42);
     if(Build.VERSION.SDK_INT>=23 && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
       requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},41);
     web=new WebView(this);
@@ -57,7 +80,7 @@ public class MainActivity extends Activity {
   }
 
   public class Bridge {
-    Bridge(){ ensureCredential(); }
+    Bridge(){ ensureCredential(); deviceId(); }
     String token(){ return getSharedPreferences("k",0).getString("device_credential",""); }
     void ensureCredential(){
       if(token().isEmpty()){
@@ -67,6 +90,26 @@ public class MainActivity extends Activity {
     }
     @JavascriptInterface public String status(){ return call("/api/status",null); }
     @JavascriptInterface public String connection(){ return call("/api/mobile/connection",null); }
+    @JavascriptInterface public String resume(long after){
+      String raw=call("/api/mobile/resume?after="+after,null);
+      try{
+        JSONObject d=new JSONObject(raw); JSONArray a=d.optJSONArray("events");
+        if(a!=null)for(int i=0;i<a.length();i++){
+          JSONObject e=a.getJSONObject(i);
+          if("task.completed".equals(e.optString("type"))){
+            JSONObject p=e.optJSONObject("payload"); if(p!=null)notifyCompleted(p.optString("summary","KRISHNA completed the task"));
+          }
+        }
+      }catch(Exception ignored){}
+      return raw;
+    }
+    @JavascriptInterface public String pairingRequest(){
+      try{
+        JSONObject b=new JSONObject();b.put("device_id",deviceId());b.put("name","KRISHNA Mobile");
+        return callUnauthed("/api/mobile/pair/request",b.toString());
+      }catch(Exception e){return "{\"error\":"+JSONObject.quote(String.valueOf(e.getMessage()))+"}";}
+    }
+    @JavascriptInterface public void savePairingToken(String value){if(value!=null&&!value.isEmpty())getSharedPreferences("k",0).edit().putString("device_credential",value).apply();}
     @JavascriptInterface public String event(String kind,String detail){
       return call("/api/core/event","{\"source\":\"mobile\",\"kind\":"+JSONObject.quote(kind)+",\"detail\":"+JSONObject.quote(detail)+",\"project\":\"system\"}");
     }
@@ -131,7 +174,7 @@ public class MainActivity extends Activity {
       HttpURLConnection c=(HttpURLConnection)new URL(base+path).openConnection();
       c.setConnectTimeout(4000); c.setReadTimeout(120000);
       c.setRequestProperty("Authorization","Device "+token());
-      c.setRequestProperty("X-Krishna-Device","android-primary");
+      c.setRequestProperty("X-Krishna-Device",deviceId());
       c.setRequestProperty("Accept","application/json");
       return c;
     }
@@ -143,6 +186,17 @@ public class MainActivity extends Activity {
         for(int n;(n=in.read(b))>0;)o.write(b,0,n);
         return c.getResponseCode()<400?o.toByteArray():null;
       }catch(Exception e){ return null; }
+    }
+    String callUnauthed(String path,String body){
+      try{
+        String base=getSharedPreferences("k",0).getString("core_url","http://192.168.0.106:8766");
+        HttpURLConnection c=(HttpURLConnection)new URL(base+path).openConnection();
+        c.setConnectTimeout(4000);c.setReadTimeout(10000);c.setRequestProperty("X-Krishna-Device",deviceId());
+        c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");
+        c.getOutputStream().write(body.getBytes("UTF-8"));
+        InputStream in=c.getResponseCode()<400?c.getInputStream():c.getErrorStream();
+        ByteArrayOutputStream o=new ByteArrayOutputStream();byte[]b=new byte[2048];for(int n;(n=in.read(b))>0;)o.write(b,0,n);return o.toString("UTF-8");
+      }catch(Exception e){return "{\"error\":"+JSONObject.quote(String.valueOf(e.getMessage()))+"}";}
     }
     String call(String path,String body){
       try{
