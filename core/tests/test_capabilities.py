@@ -24,6 +24,7 @@ from krishna_core.skill_runtime import SkillRegistry, parse_skill_markdown
 from krishna_core.content_guard import assess_untrusted_content
 from krishna_core.orchestrator import Orchestrator
 from krishna_core.task_ledger import TaskLedger
+from krishna_core.promotion_manager import PromotionManager
 
 
 class KrishnaCapabilityTests(unittest.TestCase):
@@ -442,6 +443,35 @@ class KrishnaCapabilityTests(unittest.TestCase):
             finally:
                 orch.task_ledger.close()
                 orch.memory.close()
+
+
+    def test_promotion_manager_promotes_verified_candidate_with_backup(self):
+        with tempfile.TemporaryDirectory() as td:
+            live=Path(td)/"live"; candidate=Path(td)/"candidate"; backups=Path(td)/"backups"
+            live.mkdir(); candidate.mkdir()
+            (live/"app.txt").write_text("old",encoding="utf-8")
+            (candidate/"app.txt").write_text("new",encoding="utf-8")
+            mgr=PromotionManager(backups)
+            result=mgr.promote("demo",live,candidate,lambda root:{"verified":(root/"app.txt").read_text(encoding="utf-8")=="new","checks":[]})
+            self.assertTrue(result["promoted"])
+            self.assertFalse(result["rolled_back"])
+            self.assertEqual("new",(live/"app.txt").read_text(encoding="utf-8"))
+            self.assertTrue(Path(result["backup"]).exists())
+
+    def test_promotion_manager_rolls_back_failed_post_verification(self):
+        with tempfile.TemporaryDirectory() as td:
+            live=Path(td)/"live"; candidate=Path(td)/"candidate"; backups=Path(td)/"backups"
+            live.mkdir(); candidate.mkdir()
+            (live/"app.txt").write_text("old",encoding="utf-8")
+            (candidate/"app.txt").write_text("bad",encoding="utf-8")
+            (candidate/"added.txt").write_text("remove me",encoding="utf-8")
+            mgr=PromotionManager(backups)
+            result=mgr.promote("demo",live,candidate,lambda root:{"verified":False,"checks":[{"passed":False}]})
+            self.assertTrue(result["rolled_back"])
+            self.assertFalse(result["promoted"])
+            self.assertEqual("old",(live/"app.txt").read_text(encoding="utf-8"))
+            self.assertFalse((live/"added.txt").exists())
+
 
     def test_specialist_selection_rejects_irrelevant_health_specialists(self):
         from krishna_core.specialist_library import SpecialistLibrary, Specialist
