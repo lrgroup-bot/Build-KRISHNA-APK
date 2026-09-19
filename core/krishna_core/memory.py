@@ -276,3 +276,13 @@ class MemoryStore:
                 }
                 for r in cur.fetchall()
             ]
+
+
+    def close(self):
+        """Flush and close the SQLite connection so Windows can release the database file."""
+        with self.lock:
+            db = self.db
+            if db is not None:
+                db.commit()
+                db.close()
+                self.db = None
