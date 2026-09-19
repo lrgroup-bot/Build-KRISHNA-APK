@@ -62,6 +62,24 @@ def _candidate_core_commands() -> list[list[str]]:
 def ensure_core() -> bool:
     if _core_ok():
         return True
+
+    # Preferred path for KRISHNA.exe: start the bundled/local Core in-process.
+    try:
+        from http.server import ThreadingHTTPServer
+        from krishna_core.config import settings
+        from krishna_core.server import Handler
+
+        server = ThreadingHTTPServer(("127.0.0.1", int(settings.port)), Handler)
+        thread = threading.Thread(target=server.serve_forever, name="krishna-core", daemon=True)
+        thread.start()
+        for _ in range(20):
+            time.sleep(0.25)
+            if _core_ok():
+                return True
+    except Exception:
+        pass
+
+    # Source-development fallback.
     env = os.environ.copy()
     env.setdefault("KRISHNA_HOST", "127.0.0.1")
     env.setdefault("KRISHNA_PORT", "8766")
