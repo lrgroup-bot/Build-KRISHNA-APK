@@ -204,6 +204,7 @@ class Handler(BaseHTTPRequestHandler):
                     "registered_project_change_observer",
                     "mobile_event_bridge",
                     "child_krishna_360_avatar",
+                    "mobile_pc_remote_control",
                     "persistent_project_chats",
                     "windows_conversation_console",
                 ],
@@ -275,6 +276,82 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, orch.handle_event(
                 "mobile", "mobile_log", event, severity="info", project="system",
             ))
+
+        if self.path == "/api/mobile/control":
+            action = str(data.get("action", "")).strip().lower()
+            project = str(data.get("project", "general")).strip() or "general"
+            payload = data.get("payload") or {}
+            safe_actions = {
+                "status", "projects", "chats", "index", "investigate",
+                "inspect_ui", "research_github", "incidents", "engines",
+            }
+            if action not in safe_actions:
+                return self._json(403, {
+                    "error": "mobile action is not in the approved control set",
+                    "allowed": sorted(safe_actions),
+                })
+            try:
+                if action == "status":
+                    return self._json(200, {
+                        "ok": True,
+                        "core": "ONLINE",
+                        "watcher": watcher.snapshot(),
+                        "resources": orch.governor.snapshot(),
+                        "pc_observer": pc_observer.snapshot(),
+                        "mobile_connection": mobile_link_state(),
+                    })
+                if action == "projects":
+                    return self._json(200, {"projects": orch.projects.list()})
+                if action == "chats":
+                    return self._json(200, {"chats": orch.chats(project)})
+                if action == "index":
+                    return self._json(200, orch.index_project(project))
+                if action == "investigate":
+                    symptom = str(payload.get("symptom", "")).strip()
+                    if not symptom:
+                        return self._json(400, {"error": "symptom is required"})
+                    return self._json(200, orch.investigate(symptom, project, payload.get("components") or []))
+                if action == "inspect_ui":
+                    url = str(payload.get("url", "")).strip()
+                    if not url:
+                        return self._json(400, {"error": "url is required"})
+                    return self._json(200, orch.inspect_ui(
+                        project, url,
+                        actions=payload.get("actions") or [],
+                        screenshot_path=payload.get("screenshot_path"),
+                    ))
+                if action == "research_github":
+                    query = str(payload.get("query", "")).strip()
+                    if not query:
+                        return self._json(400, {"error": "query is required"})
+                    return self._json(200, orch.research_github(project, query, int(payload.get("limit", 10))))
+                if action == "incidents":
+                    return self._json(200, {"incidents": orch.memory.incidents(project, 50)})
+                if action == "engines":
+                    return self._json(200, {
+                        "capabilities": [
+                            "project_registry","repository_index","project_graph",
+                            "evidence_engine","hypothesis_investigation",
+                            "persistent_incident_memory","knowledge_ingestion",
+                            "registered_action_registry","shadow_workspace",
+                            "shadow_repair_pipeline","verification_gates",
+                            "verification_review","resource_governor",
+                            "privacy_aware_model_routing","chromium_ui_inspection",
+                            "github_repository_research","goal_completion_evaluation",
+                            "recovery_ladder","defensive_security_scan",
+                            "watcher_transitions","neural_action_graph",
+                            "pc_resource_observer","registered_project_change_observer",
+                            "mobile_event_bridge","persistent_project_chats",
+                            "windows_conversation_console","child_krishna_360_avatar",
+                            "mobile_pc_remote_control",
+                        ]
+                    })
+            except KeyError:
+                return self._json(404, {"error": "project not registered"})
+            except (ValueError, RuntimeError) as exc:
+                return self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                return self._json(500, {"error": str(exc)})
 
         if self.path in ("/v1/chat", "/api/core/chat"):
             if str(data.get("source", "")).lower() == "mobile":
