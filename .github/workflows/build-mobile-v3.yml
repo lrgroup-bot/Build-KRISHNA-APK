@@ -75,6 +75,7 @@ jobs:
           EOF
 
           cp app/src/main/res/raw/krishna-ca.cer app/src/main/res/raw/krishna_ca.cer
+          rm -f app/src/main/res/raw/krishna-ca.cer
           cp app/src/main/res/drawable/krishna_hud.png app/src/main/res/drawable/krishna_hud_v3.png
 
           cat > app/src/main/AndroidManifest.xml <<'EOF'
