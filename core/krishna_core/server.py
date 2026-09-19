@@ -259,7 +259,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/resources":
             return self._json(200, orch.governor.snapshot())
         if path == "/api/tasks":
-            return self._json(200, {"tasks": orch.task_ledger.active()})
+            project = (query.get("project") or [None])[0]
+            limit_raw = (query.get("limit") or ["100"])[0]
+            try:
+                limit = max(1, min(int(limit_raw), 500))
+            except (TypeError, ValueError):
+                return self._json(400, {"error": "limit must be an integer"})
+            tasks = orch.task_ledger.list_tasks(project=project, limit=limit)
+            return self._json(200, {"tasks": tasks, "active": [t for t in tasks if t.get("status") in {"queued","running","verifying","waiting_approval"}]})
         if path in ("/api/core/neural-state", "/api/neural/state"):
             return self._json(200, orch.neural_state())
         if path == "/api/core/state":
