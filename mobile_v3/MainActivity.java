@@ -105,7 +105,7 @@ public class MainActivity extends Activity {
     }
     String call(String path,String body){
       try{
-        HttpsURLConnection c=conn(path);
+        HttpURLConnection c=conn(path);
         if(body!=null){
           c.setRequestMethod("POST"); c.setDoOutput(true); c.setRequestProperty("Content-Type","application/json");
           c.getOutputStream().write(body.getBytes("UTF-8"));
