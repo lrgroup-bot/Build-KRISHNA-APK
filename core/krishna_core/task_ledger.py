@@ -33,3 +33,11 @@ class TaskLedger:
         with self.lock:
             rows=self.db.execute("SELECT task_id FROM task_ledger WHERE status IN ('queued','running','verifying','waiting_approval') ORDER BY created_at").fetchall()
         return [self.get(x[0]) for x in rows]
+
+
+    def close(self):
+        with self.lock:
+            if self.db is not None:
+                self.db.commit()
+                self.db.close()
+                self.db = None
