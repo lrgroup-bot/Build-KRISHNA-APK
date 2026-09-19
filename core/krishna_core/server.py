@@ -48,6 +48,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _body(self):
         n = int(self.headers.get("Content-Length", "0"))
+        if n > 8 * 1024 * 1024:
+            raise ValueError("request body exceeds 8 MB")
         return json.loads(self.rfile.read(n) or b"{}")
 
     def do_GET(self):
@@ -86,9 +88,13 @@ class Handler(BaseHTTPRequestHandler):
                     "defensive_security_scan",
                     "watcher_transitions",
                     "local_cloud_model_routing",
+                    "vision_local_enrolled_identity",
                 ],
                 "mutating_actions_enabled": settings.allow_actions,
+                "vision": orch.vision.status(),
             })
+        if self.path == "/api/vision/status":
+            return self._json(200, orch.vision.status())
         if self.path == "/api/project-graph":
             return self._json(200, orch.graph.snapshot())
         if self.path == "/api/recovery/ladder":
@@ -104,7 +110,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             data = self._body()
         except Exception as exc:
-            return self._json(400, {"error": f"invalid json: {exc}"})
+            return self._json(400, {"error": f"invalid request: {exc}"})
 
         if self.path in ("/v1/chat", "/api/core/chat"):
             msg = data.get("message", "")
@@ -119,6 +125,42 @@ class Handler(BaseHTTPRequestHandler):
                 mark("ERROR", str(exc)[:160])
                 activity["current_activity"] = "Error"
                 return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/vision/enroll":
+            mark("VISION ENROLL", str(data.get("name", ""))[:80])
+            try:
+                out = orch.vision.enroll(
+                    name=data.get("name", ""),
+                    image_base64=data.get("image_base64", ""),
+                    consent=bool(data.get("consent", False)),
+                    device=str(data.get("device", "unknown")),
+                )
+                mark("VISION ENROLLED", out.get("subject", ""))
+                activity["current_activity"] = "Idle"
+                return self._json(200, out)
+            except ValueError as exc:
+                mark("VISION ENROLL REJECTED", str(exc)[:120])
+                return self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                mark("VISION ENROLL ERROR", str(exc)[:120])
+                return self._json(503, {"error": str(exc)})
+
+        if self.path == "/api/vision/recognize":
+            mark("VISION SCAN", "Comparing with local enrolled gallery")
+            try:
+                out = orch.vision.recognize(
+                    image_base64=data.get("image_base64", ""),
+                    device=str(data.get("device", "unknown")),
+                )
+                mark("VISION RESULT", out.get("state", "UNKNOWN"))
+                activity["current_activity"] = "Idle"
+                return self._json(200, out)
+            except ValueError as exc:
+                mark("VISION SCAN REJECTED", str(exc)[:120])
+                return self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                mark("VISION SCAN ERROR", str(exc)[:120])
+                return self._json(503, {"error": str(exc)})
 
         if self.path == "/api/investigate":
             symptom = str(data.get("symptom", "")).strip()

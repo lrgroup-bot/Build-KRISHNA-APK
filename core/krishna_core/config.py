@@ -10,5 +10,9 @@ class Settings:
     cloud_api_url: str = os.getenv("KRISHNA_CLOUD_API_URL", "")
     cloud_api_key: str = os.getenv("KRISHNA_CLOUD_API_KEY", "")
     allow_actions: bool = os.getenv("KRISHNA_ALLOW_ACTIONS", "0") == "1"
+    compreface_url: str = os.getenv("KRISHNA_COMPREFACE_URL", "http://127.0.0.1:8000")
+    compreface_api_key: str = os.getenv("KRISHNA_COMPREFACE_API_KEY", "")
+    face_known_threshold: float = float(os.getenv("KRISHNA_FACE_KNOWN_THRESHOLD", "0.80"))
+    face_possible_threshold: float = float(os.getenv("KRISHNA_FACE_POSSIBLE_THRESHOLD", "0.65"))
 
 settings = Settings()

@@ -8,6 +8,7 @@ from .verification import VerificationEngine
 from .recovery import RecoveryEngine
 from .knowledge import KnowledgeIngestor
 from .security import DefensiveSecurityScanner
+from .identity import VisionIdentityService
 
 class Orchestrator:
     def __init__(self):
@@ -20,6 +21,13 @@ class Orchestrator:
         self.recovery = RecoveryEngine(allow_mutating_actions=settings.allow_actions)
         self.knowledge = KnowledgeIngestor(self.memory)
         self.security = DefensiveSecurityScanner()
+        self.vision = VisionIdentityService(
+            self.memory,
+            settings.compreface_url,
+            settings.compreface_api_key,
+            known_threshold=settings.face_known_threshold,
+            possible_threshold=settings.face_possible_threshold,
+        )
         self._register_builtin_probes()
 
     def _register_builtin_probes(self):
