@@ -9,7 +9,6 @@ import android.media.*;
 import android.util.Base64;
 import java.net.*;
 import java.io.*;
-import javax.net.ssl.*;
 import org.json.*;
 import java.security.*;
 
@@ -71,7 +70,7 @@ public class MainActivity extends Activity {
       return call("/api/core/event","{\"source\":\"mobile\",\"kind\":"+JSONObject.quote(kind)+",\"detail\":"+JSONObject.quote(detail)+",\"project\":\"system\"}");
     }
     @JavascriptInterface public String state(){ return call("/api/core/state",null); }
-    @JavascriptInterface public String chat(String m){ return call(CORE,"{\"message\":"+JSONObject.quote(m)+",\"project\":\"general\"}"); }
+    @JavascriptInterface public String chat(String m){ return call(CORE,"{\"message\":"+JSONObject.quote(m)+",\"project\":\"general\",\"source\":\"mobile\"}"); }
     @JavascriptInterface public String avatarBase64(){
       byte[] b=callBytes("/api/avatar");
       return b==null?"":Base64.encodeToString(b,Base64.NO_WRAP);
@@ -86,8 +85,9 @@ public class MainActivity extends Activity {
         return "{\"ok\":true}";
       }catch(Exception e){ return "{\"error\":"+JSONObject.quote(String.valueOf(e.getMessage()))+"}"; }
     }
-    HttpsURLConnection conn(String path)throws Exception{
-      HttpsURLConnection c=(HttpsURLConnection)new URL("https://192.168.0.106:8765"+path).openConnection();
+    HttpURLConnection conn(String path)throws Exception{
+      String base=getSharedPreferences("k",0).getString("core_url","http://192.168.0.106:8766");
+      HttpURLConnection c=(HttpURLConnection)new URL(base+path).openConnection();
       c.setConnectTimeout(4000); c.setReadTimeout(120000);
       c.setRequestProperty("Authorization","Device "+token());
       c.setRequestProperty("X-Krishna-Device","android-primary");
@@ -96,7 +96,7 @@ public class MainActivity extends Activity {
     }
     byte[] callBytes(String path){
       try{
-        HttpsURLConnection c=conn(path);
+        HttpURLConnection c=conn(path);
         InputStream in=c.getResponseCode()<400?c.getInputStream():c.getErrorStream();
         ByteArrayOutputStream o=new ByteArrayOutputStream(); byte[]b=new byte[8192];
         for(int n;(n=in.read(b))>0;)o.write(b,0,n);
