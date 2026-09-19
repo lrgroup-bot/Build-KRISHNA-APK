@@ -51,13 +51,15 @@ if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
     _BUNDLE_ROOT = Path(sys._MEIPASS)
     DASHBOARD = _BUNDLE_ROOT / "dashboard.html"
     WEB_VALIDATION = _BUNDLE_ROOT / "web_validation.html"
-    AVATAR_B64 = _BUNDLE_ROOT / "avatar" / "krishna_child_360.webp.b64"\n    AVATAR_GLB = _BUNDLE_ROOT / "avatar" / "krishna.glb"
+    AVATAR_B64 = _BUNDLE_ROOT / "avatar" / "krishna_child_360.webp.b64"
+    AVATAR_GLB = _BUNDLE_ROOT / "avatar" / "krishna.glb"
 else:
     _CORE_ROOT = Path(__file__).resolve().parents[1]
     _REPO_ROOT = Path(__file__).resolve().parents[2]
     DASHBOARD = _CORE_ROOT / "dashboard.html"
     WEB_VALIDATION = _CORE_ROOT / "web_validation.html"
-    AVATAR_B64 = _REPO_ROOT / "avatar" / "krishna_child_360.webp.b64"\n    AVATAR_GLB = _REPO_ROOT / "dashboard" / "assets" / "avatar" / "krishna.glb"
+    AVATAR_B64 = _REPO_ROOT / "avatar" / "krishna_child_360.webp.b64"
+    AVATAR_GLB = _REPO_ROOT / "dashboard" / "assets" / "avatar" / "krishna.glb"
 
 
 def avatar_360_bytes():
