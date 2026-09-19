@@ -393,6 +393,56 @@ class KrishnaCapabilityTests(unittest.TestCase):
                 second.task_ledger.close()
                 second.memory.close()
 
+
+    def test_managed_goal_requires_registered_action_before_mutation(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "project"
+            root.mkdir()
+            live = root / "app.txt"
+            live.write_text("live", encoding="utf-8")
+            orch = Orchestrator(db_path=str(Path(td) / "work.db"))
+            try:
+                orch.register_project("demo", str(root), allowed_actions=["patch"])
+                orch.router.route = lambda prompt, privacy="local_only": {"provider": "test", "text": "0.5|observed"}
+                waiting = orch.run_managed_goal("demo", "repair app")
+                self.assertEqual("waiting_approval", waiting["status"])
+                self.assertEqual("action_selection", waiting["phase"])
+                with self.assertRaises(KeyError):
+                    orch.run_managed_goal("demo", "repair app", action_name="patch", approved=True)
+                self.assertEqual("live", live.read_text(encoding="utf-8"))
+            finally:
+                orch.task_ledger.close()
+                orch.memory.close()
+
+    def test_managed_goal_verified_shadow_does_not_touch_live_project(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "project"
+            root.mkdir()
+            live = root / "app.txt"
+            live.write_text("broken", encoding="utf-8")
+            orch = Orchestrator(db_path=str(Path(td) / "shadow.db"))
+            try:
+                orch.register_project("demo", str(root), allowed_actions=["patch"], verification_checks=["content"])
+                orch.register_action(
+                    "demo", "patch",
+                    lambda payload: (Path(payload["workspace"]) / "app.txt").write_text("fixed", encoding="utf-8") or {"ok": True},
+                    mutating=False,
+                )
+                orch.register_verification_check(
+                    "demo", "content",
+                    lambda workspace: ((workspace / "app.txt").read_text(encoding="utf-8") == "fixed", "shadow fixed"),
+                )
+                orch.router.route = lambda prompt, privacy="local_only": {"provider": "test", "text": "0.5|observed"}
+                result = orch.run_managed_goal("demo", "repair app", action_name="patch", approved=True)
+                self.assertEqual("verified", result["status"])
+                self.assertEqual("promotion_ready", result["phase"])
+                self.assertTrue(result["detail"]["promotion_ready"])
+                self.assertFalse(result["detail"]["live_project_modified"])
+                self.assertEqual("broken", live.read_text(encoding="utf-8"))
+            finally:
+                orch.task_ledger.close()
+                orch.memory.close()
+
     def test_specialist_selection_rejects_irrelevant_health_specialists(self):
         from krishna_core.specialist_library import SpecialistLibrary, Specialist
         with tempfile.TemporaryDirectory() as td:
