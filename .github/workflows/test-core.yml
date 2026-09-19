@@ -37,6 +37,13 @@ jobs:
           done
           curl -fsS -H 'X-Krishna-Device: android-primary' http://127.0.0.1:18766/api/core/state >/tmp/mobile-state.json
           curl -fsS http://127.0.0.1:18766/api/mobile/connection >/tmp/mobile-connection.json
+          curl -fsS http://127.0.0.1:18766/api/avatar360 >/tmp/krishna-avatar.webp
+          test -s /tmp/krishna-avatar.webp
+          python - <<'PY'
+          data=open('/tmp/krishna-avatar.webp','rb').read(16)
+          assert data[:4] == b'RIFF' and data[8:12] == b'WEBP', data
+          print('KRISHNA 360 avatar endpoint verified')
+          PY
           python - <<'PY'
           import json
           state=json.load(open('/tmp/mobile-connection.json', encoding='utf-8'))

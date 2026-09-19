@@ -55,8 +55,8 @@ jobs:
               applicationId 'com.krishna.mobile'
               minSdk 26
               targetSdk 35
-              versionCode 30
-              versionName '3.0.0'
+              versionCode 32
+              versionName '3.2.0'
             }
           }
           EOF
@@ -106,6 +106,7 @@ jobs:
 
           cp mobile_v3/MainActivity.java app/src/main/java/com/krishna/mobile/MainActivity.java
           cp mobile_v3/index.html app/src/main/assets/index.html
+          base64 -d avatar/krishna_child_360.webp.b64 > app/src/main/assets/krishna_child_360.webp
 
           npm init -y >/dev/null 2>&1
           npm install three@0.180.0 --no-save
@@ -115,6 +116,16 @@ jobs:
 
       - name: Build APK
         run: gradle :app:assembleDebug
+
+      - name: Verify child KRISHNA 360 avatar
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          test -s app/src/main/assets/krishna_child_360.webp
+          grep -q "krishna_child_360.webp" app/src/main/assets/index.html
+          grep -q "SWIPE TO ROTATE" app/src/main/assets/index.html
+          grep -q "showView" app/src/main/assets/index.html
 
       - uses: actions/upload-artifact@v4
         with:

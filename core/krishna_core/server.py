@@ -1,5 +1,5 @@
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-import json, time, threading
+import json, time, threading, base64
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
@@ -42,6 +42,14 @@ def mobile_link_state():
             "age_seconds": None if age is None else round(age, 1),
         }
 DASHBOARD = (Path(__file__).resolve().parents[1] / "dashboard.html")
+AVATAR_B64 = Path(__file__).resolve().parents[2] / "avatar" / "krishna_child_360.webp.b64"
+
+
+def avatar_360_bytes():
+    try:
+        return base64.b64decode(AVATAR_B64.read_text(encoding="utf-8").strip(), validate=True)
+    except Exception:
+        return b""
 
 
 def mark(event, detail=""):
@@ -97,6 +105,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b)
 
+    def _binary(self, code, body, content_type):
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "public, max-age=3600")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _html(self, code, text):
         b = text.encode()
         self.send_response(code)
@@ -118,6 +134,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if path in ("/", "/dashboard"):
             return self._html(200, DASHBOARD.read_text(encoding="utf-8"))
+        if path == "/api/avatar360":
+            body = avatar_360_bytes()
+            if not body:
+                return self._json(404, {"error": "avatar asset unavailable"})
+            return self._binary(200, body, "image/webp")
         if path in ("/health", "/api/status"):
             return self._json(200, {
                 "ok": True,
@@ -172,6 +193,7 @@ class Handler(BaseHTTPRequestHandler):
                     "pc_resource_observer",
                     "registered_project_change_observer",
                     "mobile_event_bridge",
+                    "child_krishna_360_avatar",
                 ],
                 "mutating_actions_enabled": settings.allow_actions,
             })
