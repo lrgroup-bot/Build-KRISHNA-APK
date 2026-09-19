@@ -2,7 +2,7 @@ param(
   [switch]$SkipCua,
   [switch]$SkipGoose,
   [switch]$SkipArise,
-  [string]$InstallRoot = "$env:USERPROFILE\.krishna\tools"
+  [string]$InstallRoot = "E:\KRISHNA\tools"
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,110 +12,108 @@ function Write-Step([string]$Text) { Write-Host "[KRISHNA] $Text" -ForegroundCol
 function Write-Ok([string]$Text) { Write-Host "[OK] $Text" -ForegroundColor Green }
 function Write-Warn([string]$Text) { Write-Host "[WARN] $Text" -ForegroundColor Yellow }
 function Has-Cmd([string]$Name) { return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue) }
-
 function Run-Checked {
-  param(
-    [Parameter(Mandatory=$true)][string]$Exe,
-    [Parameter(Mandatory=$false)][string[]]$Arguments = @()
-  )
+  param([Parameter(Mandatory=$true)][string]$Exe,[Parameter(Mandatory=$false)][string[]]$Arguments=@())
   & $Exe @Arguments
-  $code = $LASTEXITCODE
-  if ($null -eq $code) { $code = 0 }
+  $code=$LASTEXITCODE; if ($null -eq $code) { $code=0 }
   if ($code -ne 0) { throw "$Exe failed with exit code $code" }
 }
 
-New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
+$KrishnaRoot = Split-Path -Parent $PSScriptRoot
+$InstallRoot = [System.IO.Path]::GetFullPath($InstallRoot)
+$ConfigRoot = Join-Path $KrishnaRoot "config"
+$RuntimeRoot = Join-Path $KrishnaRoot "runtime"
+$ShadowRoot = Join-Path $KrishnaRoot "shadow"
+$LogRoot = Join-Path $KrishnaRoot "logs"
+$NpmRoot = Join-Path $InstallRoot "npm"
+$PythonRoot = Join-Path $InstallRoot "python"
+$CbmRoot = Join-Path $InstallRoot "codebase-memory"
+$CuaRoot = Join-Path $InstallRoot "cua"
+$AriseRoot = Join-Path $InstallRoot "ARISE"
+$GooseRoot = Join-Path $InstallRoot "goose"
+
+@($InstallRoot,$ConfigRoot,$RuntimeRoot,$ShadowRoot,$LogRoot,$NpmRoot,$PythonRoot,$CbmRoot,$CuaRoot,$AriseRoot,$GooseRoot) | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
 
 Write-Step "Checking prerequisites"
-if (-not (Has-Cmd "git")) { throw "Git is required. Install Git for Windows first." }
+if (-not (Has-Cmd "git")) { throw "Git is required." }
 if (-not (Has-Cmd "python")) { throw "Python 3.10+ is required." }
 if (-not (Has-Cmd "npm")) { throw "Node.js/npm is required." }
 
-Write-Step "Installing mythos-agent"
-Run-Checked -Exe "npm" -Arguments @("install","-g","mythos-agent")
-Write-Ok "mythos-agent installed"
+Write-Step "Installing mythos-agent into $NpmRoot"
+Run-Checked -Exe "npm" -Arguments @("install","-g","--prefix",$NpmRoot,"mythos-agent")
 
-Write-Step "Installing CALM MCP"
-Run-Checked -Exe "npm" -Arguments @("install","-g","@eilodon/calm-mcp")
-Write-Ok "CALM installed"
+Write-Step "Installing CALM into $NpmRoot"
+Run-Checked -Exe "npm" -Arguments @("install","-g","--prefix",$NpmRoot,"@eilodon/calm-mcp")
 
-Write-Step "Installing mini-SWE-agent"
-Run-Checked -Exe "python" -Arguments @("-m","pip","install","--upgrade","mini-swe-agent")
-Write-Ok "mini-SWE-agent installed"
+Write-Step "Creating shared KRISHNA Python agent environment"
+$AgentVenv = Join-Path $PythonRoot "agents"
+if (-not (Test-Path $AgentVenv)) { Run-Checked -Exe "python" -Arguments @("-m","venv",$AgentVenv) }
+$AgentPython = Join-Path $AgentVenv "Scripts\python.exe"
+Run-Checked -Exe $AgentPython -Arguments @("-m","pip","install","--upgrade","pip")
+Run-Checked -Exe $AgentPython -Arguments @("-m","pip","install","--upgrade","mini-swe-agent","swe-rex")
 
-Write-Step "Installing SWE-ReX"
-Run-Checked -Exe "python" -Arguments @("-m","pip","install","--upgrade","swe-rex")
-Write-Ok "SWE-ReX installed"
-
-Write-Step "Installing codebase-memory-mcp using the official Windows installer"
+Write-Step "Installing codebase-memory-mcp into $CbmRoot"
 $cbmInstaller = Join-Path $env:TEMP "krishna-codebase-memory-install.ps1"
 Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.ps1" -OutFile $cbmInstaller
-powershell -NoProfile -ExecutionPolicy Bypass -File $cbmInstaller --skip-config
-if ($LASTEXITCODE -ne 0) {
-  if (Has-Cmd "codebase-memory-mcp") {
-    Write-Warn "codebase-memory-mcp binary is present, but its installer returned a non-zero status. Continuing because KRISHNA uses the binary directly and does not require agent auto-configuration."
-  } else {
-    throw "codebase-memory-mcp installer failed and the binary was not found"
-  }
-} else {
-  Write-Ok "codebase-memory-mcp installed (agent auto-configuration skipped)"
-}
+powershell -NoProfile -ExecutionPolicy Bypass -File $cbmInstaller "--dir=$CbmRoot" --skip-config
+if ($LASTEXITCODE -ne 0 -and -not (Test-Path (Join-Path $CbmRoot "codebase-memory-mcp.exe"))) { throw "codebase-memory-mcp install failed" }
 
 if (-not $SkipCua) {
-  Write-Step "Installing CUA Driver using the official Windows installer"
+  Write-Step "Installing CUA Driver into $CuaRoot"
+  $env:CUA_DRIVER_RS_INSTALL_DIR = Join-Path $CuaRoot "bin"
+  $env:CUA_DRIVER_RS_HOME = Join-Path $CuaRoot "home"
   $cuaInstaller = Join-Path $env:TEMP "krishna-cua-driver-install.ps1"
   Invoke-WebRequest -UseBasicParsing -Uri "https://cua.ai/driver/install.ps1" -OutFile $cuaInstaller
-  powershell -NoProfile -ExecutionPolicy Bypass -File $cuaInstaller
-  if ($LASTEXITCODE -eq 0) {
-    Write-Ok "CUA Driver installed"
-    if (Has-Cmd "cua-driver") {
-      try { & cua-driver telemetry disable | Out-Host } catch { Write-Warn "Could not disable CUA telemetry automatically." }
-    }
-  } else { Write-Warn "CUA installation failed; KRISHNA will keep running without it." }
+  powershell -NoProfile -ExecutionPolicy Bypass -File $cuaInstaller -NoPathUpdate
+  if ($LASTEXITCODE -ne 0) { Write-Warn "CUA installation failed; continuing." }
 }
 
 if (-not $SkipArise) {
-  Write-Step "Installing ARISE into an isolated virtual environment"
-  $ariseDir = Join-Path $InstallRoot "ARISE"
-  if (-not (Test-Path (Join-Path $ariseDir ".git"))) {
-    Run-Checked -Exe "git" -Arguments @("clone","https://github.com/FARD-Lab/ARISE.git",$ariseDir)
-  } else {
-    Run-Checked -Exe "git" -Arguments @("-C",$ariseDir,"pull","--ff-only")
-  }
-  $venvDir = Join-Path $ariseDir ".venv"
-  if (-not (Test-Path $venvDir)) {
-    Run-Checked -Exe "python" -Arguments @("-m","venv",$venvDir)
-  }
-  $arisePython = Join-Path $venvDir "Scripts\python.exe"
-  Run-Checked -Exe $arisePython -Arguments @("-m","pip","install","--upgrade","pip")
-  Run-Checked -Exe $arisePython -Arguments @("-m","pip","install","-e",$ariseDir)
-  Write-Ok "ARISE installed in $venvDir"
+  Write-Step "Installing ARISE into $AriseRoot"
+  if (-not (Test-Path (Join-Path $AriseRoot ".git"))) { Run-Checked -Exe "git" -Arguments @("clone","https://github.com/FARD-Lab/ARISE.git",$AriseRoot) }
+  else { Run-Checked -Exe "git" -Arguments @("-C",$AriseRoot,"pull","--ff-only") }
+  $AriseVenv = Join-Path $AriseRoot ".venv"
+  if (-not (Test-Path $AriseVenv)) { Run-Checked -Exe "python" -Arguments @("-m","venv",$AriseVenv) }
+  $ArisePython = Join-Path $AriseVenv "Scripts\python.exe"
+  Run-Checked -Exe $ArisePython -Arguments @("-m","pip","install","--upgrade","pip")
+  Run-Checked -Exe $ArisePython -Arguments @("-m","pip","install","-e",$AriseRoot)
 }
 
 if (-not $SkipGoose) {
-  Write-Step "Installing Goose CLI when bash is available"
-  $bash = Get-Command bash -ErrorAction SilentlyContinue
-  if ($bash) {
-    & $bash.Source -lc "curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | bash"
-    if ($LASTEXITCODE -eq 0) { Write-Ok "Goose CLI installed" }
-    else { Write-Warn "Goose installer returned exit code $LASTEXITCODE" }
-  } else {
-    Write-Warn "Bash not found. Goose CLI skipped; install Git Bash/MSYS2 or Goose Desktop later."
-  }
+  Write-Step "Installing Goose into $GooseRoot"
+  $env:GOOSE_BIN_DIR = Join-Path $GooseRoot "bin"
+  $env:CONFIGURE = "false"
+  $gooseInstaller = Join-Path $env:TEMP "krishna-goose-install.ps1"
+  Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/aaif-goose/goose/main/download_cli.ps1" -OutFile $gooseInstaller
+  powershell -NoProfile -ExecutionPolicy Bypass -File $gooseInstaller
+  if ($LASTEXITCODE -ne 0) { Write-Warn "Goose installation failed; continuing." }
 }
 
-$envFile = Join-Path $env:USERPROFILE ".krishna\mythos-stack.env"
-New-Item -ItemType Directory -Force -Path (Split-Path $envFile) | Out-Null
+$npmBin = $NpmRoot
+$mythosCmd = Join-Path $npmBin "mythos-agent.cmd"
+$calmCmd = Join-Path $npmBin "calm.cmd"
+$miniCmd = Join-Path $AgentVenv "Scripts\mini.exe"
+$sweRexCmd = Join-Path $AgentVenv "Scripts\swe-rex.exe"
+$cbmCmd = Join-Path $CbmRoot "codebase-memory-mcp.exe"
+$cuaCmd = Join-Path $CuaRoot "bin\cua-driver.exe"
+$arisePython = Join-Path $AriseRoot ".venv\Scripts\python.exe"
+$gooseCmd = Join-Path $GooseRoot "bin\goose.exe"
+
+$envFile = Join-Path $ConfigRoot "mythos-stack.env"
 @(
-  "KRISHNA_CODEBASE_MEMORY_CMD=codebase-memory-mcp",
-  "KRISHNA_CALM_CMD=calm",
-  "KRISHNA_MYTHOS_AGENT_CMD=mythos-agent",
-  "KRISHNA_MINI_SWE_CMD=mini",
-  "KRISHNA_SWE_REX_CMD=swe-rex",
-  "KRISHNA_ARISE_CMD=arise",
-  "KRISHNA_CUA_CMD=cua",
-  "KRISHNA_GOOSE_CMD=goose"
+  "KRISHNA_CODEBASE_MEMORY_CMD=$cbmCmd",
+  "KRISHNA_CALM_CMD=$calmCmd",
+  "KRISHNA_MYTHOS_AGENT_CMD=$mythosCmd",
+  "KRISHNA_MINI_SWE_CMD=$miniCmd",
+  "KRISHNA_SWE_REX_CMD=$sweRexCmd",
+  "KRISHNA_ARISE_CMD=$arisePython",
+  "KRISHNA_CUA_CMD=$cuaCmd",
+  "KRISHNA_GOOSE_CMD=$gooseCmd",
+  "KRISHNA_SHADOW_ROOT=$ShadowRoot",
+  "KRISHNA_RUNTIME_ROOT=$RuntimeRoot",
+  "KRISHNA_LOG_ROOT=$LogRoot"
 ) | Set-Content -Encoding UTF8 $envFile
 
-Write-Ok "Bootstrap complete"
-Write-Host "Next run: scripts\verify-mythos-stack.ps1 and scripts\discover-krishna-projects.ps1"
+Write-Ok "All KRISHNA tools targeted under $InstallRoot"
+Write-Host "Config: $envFile"
+Write-Host "Next run: scripts\verify-mythos-stack.ps1"
