@@ -473,6 +473,22 @@ class KrishnaCapabilityTests(unittest.TestCase):
             self.assertFalse((live/"added.txt").exists())
 
 
+
+    def test_web_ui_keeps_internal_engines_out_of_manual_navigation(self):
+        ui=(Path(__file__).resolve().parents[1]/"web_validation.html").read_text(encoding="utf-8")
+        self.assertNotIn("Karma · Work",ui)
+        self.assertNotIn("Vishwakarma · Code",ui)
+        self.assertNotIn(">Sudarshan</span>",ui)
+        self.assertIn("Talk to KRISHNA",ui)
+        self.assertIn("registerProject()",ui)
+
+    def test_server_routes_work_automatically_under_krishna_identity(self):
+        server=(Path(__file__).resolve().parents[1]/"krishna_core"/"server.py").read_text(encoding="utf-8")
+        self.assertIn('if orch._looks_like_work_request(msg):',server)
+        self.assertIn('out["identity"] = "KRISHNA"',server)
+        self.assertIn('out["mode"] = "chat"',server)
+
+
     def test_specialist_selection_rejects_irrelevant_health_specialists(self):
         from krishna_core.specialist_library import SpecialistLibrary, Specialist
         with tempfile.TemporaryDirectory() as td:
