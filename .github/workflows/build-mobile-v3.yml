@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/krishna-v3-live-avatar
+      - feature/knag-pc-mobile
   pull_request:
     paths:
       - 'mobile_v3/**'
