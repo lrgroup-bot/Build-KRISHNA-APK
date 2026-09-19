@@ -16,6 +16,7 @@ from krishna_core.repository_index import RepositoryIndexer
 from krishna_core.shadow_workspace import ShadowWorkspaceManager
 from krishna_core.repair_agent import RepairAgent
 from krishna_core.neural_action_graph import NeuralActionGraph
+from krishna_core.pc_observer import PCObserver
 
 
 class KrishnaCapabilityTests(unittest.TestCase):
@@ -166,6 +167,22 @@ class KrishnaCapabilityTests(unittest.TestCase):
         background = graph.ingest("mobile", "mobile_background", "app hidden")
         self.assertEqual("sync_context", foreground["intent"]["name"])
         self.assertEqual("preserve_state", background["intent"]["name"])
+
+    def test_pc_observer_emits_pressure_transition(self):
+        events = []
+        observer = PCObserver(
+            lambda: [],
+            on_event=events.append,
+            cpu_budget_percent=60,
+            memory_budget_percent=70,
+            interval=5,
+        )
+        observer._cpu_percent = lambda: 82.0
+        observer._memory_percent = lambda: 45.0
+        snap = observer.sample_once()
+        self.assertEqual(82.0, snap["cpu_percent"])
+        self.assertTrue(snap["pressure"]["cpu"])
+        self.assertTrue(any(e["kind"] == "cpu_pressure" for e in events))
 
     def test_knag_user_command_escalates_to_reasoning(self):
         graph = NeuralActionGraph()
