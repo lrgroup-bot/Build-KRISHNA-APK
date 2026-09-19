@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/autonomous-browser-research
+      - fix/krishna-exe-core-start
       - main
     paths:
       - 'core/**'
