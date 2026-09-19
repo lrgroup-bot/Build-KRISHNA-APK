@@ -6,6 +6,8 @@ import android.content.*;
 import android.content.pm.PackageManager;
 import android.webkit.*;
 import android.media.*;
+import android.provider.MediaStore;
+import android.graphics.Bitmap;
 import android.util.Base64;
 import java.net.*;
 import java.io.*;
@@ -16,12 +18,16 @@ import java.security.*;
 public class MainActivity extends Activity {
   static final String CORE="/api/core/chat";
   static final String SPEAKER_ENGINE="LOCAL_VOICE_PROFILE_V2";
+  static final int REQ_PERMISSIONS=41;
+  static final int REQ_VISION_CAMERA=73;
   WebView web;
+  Bridge bridge;
+  String pendingVisionMode="";
+  String pendingVisionName="";
 
   @Override public void onCreate(Bundle b){
     super.onCreate(b);
-    if(Build.VERSION.SDK_INT>=23 && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
-      requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},41);
+    requestRuntimePermissions();
     web=new WebView(this);
     web.getSettings().setJavaScriptEnabled(true);
     web.getSettings().setDomStorageEnabled(true);
@@ -29,15 +35,90 @@ public class MainActivity extends Activity {
     web.setWebChromeClient(new WebChromeClient(){
       @Override public void onPermissionRequest(PermissionRequest request){
         runOnUiThread(()->{
-          if(Build.VERSION.SDK_INT>=23 && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)
+          if(Build.VERSION.SDK_INT<23 || checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)
             request.grant(request.getResources());
           else request.deny();
         });
       }
     });
-    web.addJavascriptInterface(new Bridge(),"Krishna");
+    bridge=new Bridge();
+    web.addJavascriptInterface(bridge,"Krishna");
     setContentView(web);
     web.loadUrl("file:///android_asset/index.html");
+  }
+
+  void requestRuntimePermissions(){
+    if(Build.VERSION.SDK_INT<23)return;
+    java.util.ArrayList<String> p=new java.util.ArrayList<>();
+    if(checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
+      p.add(android.Manifest.permission.RECORD_AUDIO);
+    if(checkSelfPermission(android.Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)
+      p.add(android.Manifest.permission.CAMERA);
+    if(!p.isEmpty())requestPermissions(p.toArray(new String[0]),REQ_PERMISSIONS);
+  }
+
+  void openVisionCamera(String mode,String name){
+    runOnUiThread(()->{
+      if(Build.VERSION.SDK_INT>=23 && checkSelfPermission(android.Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED){
+        visionCallback("{\"error\":\"Camera permission is required for KRISHNA Vision.\"}");
+        requestRuntimePermissions();
+        return;
+      }
+      pendingVisionMode=mode;
+      pendingVisionName=name==null?"":name.trim();
+      Intent intent=new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+      if(intent.resolveActivity(getPackageManager())==null){
+        visionCallback("{\"error\":\"No camera application is available.\"}");
+        return;
+      }
+      startActivityForResult(intent,REQ_VISION_CAMERA);
+    });
+  }
+
+  @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+    super.onActivityResult(requestCode,resultCode,data);
+    if(requestCode!=REQ_VISION_CAMERA)return;
+    if(resultCode!=RESULT_OK || data==null || data.getExtras()==null){
+      visionCallback("{\"error\":\"Face capture cancelled.\"}");
+      return;
+    }
+    Object raw=data.getExtras().get("data");
+    if(!(raw instanceof Bitmap)){
+      visionCallback("{\"error\":\"Camera did not return a usable image.\"}");
+      return;
+    }
+    Bitmap bitmap=(Bitmap)raw;
+    ByteArrayOutputStream out=new ByteArrayOutputStream();
+    bitmap.compress(Bitmap.CompressFormat.JPEG,92,out);
+    String image64=Base64.encodeToString(out.toByteArray(),Base64.NO_WRAP);
+    String mode=pendingVisionMode;
+    String name=pendingVisionName;
+    pendingVisionMode="";
+    pendingVisionName="";
+    new Thread(()->{
+      try{
+        JSONObject body=new JSONObject();
+        body.put("image_base64",image64);
+        body.put("device","krishna-mobile-primary");
+        String path="/api/vision/recognize";
+        if("enroll".equals(mode)){
+          body.put("name",name);
+          body.put("consent",true);
+          path="/api/vision/enroll";
+        }
+        String result=bridge.call(path,body.toString());
+        visionCallback(result);
+      }catch(Exception e){
+        visionCallback("{\"error\":"+JSONObject.quote(String.valueOf(e.getMessage()))+"}");
+      }
+    }).start();
+  }
+
+  void visionCallback(String json){
+    if(web==null)return;
+    runOnUiThread(()->web.evaluateJavascript(
+      "window.krishnaVisionResult("+JSONObject.quote(json)+")",null
+    ));
   }
 
   public class Bridge {
@@ -52,6 +133,9 @@ public class MainActivity extends Activity {
     @JavascriptInterface public String status(){ return call("/api/status",null); }
     @JavascriptInterface public String state(){ return call("/api/core/state",null); }
     @JavascriptInterface public String chat(String m){ return call(CORE,"{\"message\":"+JSONObject.quote(m)+",\"project\":\"general\"}"); }
+    @JavascriptInterface public String visionStatus(){ return call("/api/vision/status",null); }
+    @JavascriptInterface public void scanFace(){ openVisionCamera("scan",""); }
+    @JavascriptInterface public void enrollFace(String name){ openVisionCamera("enroll",name); }
     @JavascriptInterface public String avatarBase64(){
       byte[] b=callBytes("/api/avatar");
       return b==null?"":Base64.encodeToString(b,Base64.NO_WRAP);
@@ -90,7 +174,7 @@ public class MainActivity extends Activity {
           c.getOutputStream().write(body.getBytes("UTF-8"));
         }
         InputStream in=c.getResponseCode()<400?c.getInputStream():c.getErrorStream();
-        ByteArrayOutputStream o=new ByteArrayOutputStream(); byte[]b=new byte[2048];
+        ByteArrayOutputStream o=new ByteArrayOutputStream(); byte[]b=new byte[4096];
         for(int n;(n=in.read(b))>0;)o.write(b,0,n);
         return o.toString("UTF-8");
       }catch(Exception e){
