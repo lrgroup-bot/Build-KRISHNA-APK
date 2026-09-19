@@ -4,13 +4,16 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
 CORE_URL = os.getenv("KRISHNA_CONSOLE_CORE", "http://127.0.0.1:8766").rstrip("/")
 PROJECT = os.getenv("KRISHNA_CONSOLE_PROJECT", "general")
+STARTUP_ERRORS: list[str] = []
 
 
 def _request(path: str, payload: dict | None = None, timeout: float = 120.0) -> dict:
@@ -76,8 +79,8 @@ def ensure_core() -> bool:
             time.sleep(0.25)
             if _core_ok():
                 return True
-    except Exception:
-        pass
+    except Exception as exc:
+        STARTUP_ERRORS.append(f"in-process core: {type(exc).__name__}: {exc}")
 
     # Source-development fallback.
     env = os.environ.copy()
@@ -98,7 +101,10 @@ def ensure_core() -> bool:
                 time.sleep(0.25)
                 if _core_ok():
                     return True
-        except Exception:
+        except Exception as exc:
+            STARTUP_ERRORS.append(
+                "fallback " + " ".join(command) + f": {type(exc).__name__}: {exc}"
+            )
             continue
     return False
 
@@ -221,7 +227,12 @@ def main() -> int:
     global PROJECT
     banner()
     if not ensure_core():
-        print("KRISHNA> Core is offline. Start KRISHNA Core, then reopen this console.")
+        print("KRISHNA> Core could not start automatically.")
+        if STARTUP_ERRORS:
+            print("KRISHNA> Startup diagnostics:")
+            for err in STARTUP_ERRORS[-5:]:
+                print("  - " + err)
+        print("KRISHNA> Type /status after correcting the reported startup problem.")
     else:
         print("KRISHNA> Core connected. Radhe Radhe.")
     print()
