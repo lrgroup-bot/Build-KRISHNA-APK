@@ -527,6 +527,21 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, TypeError) as exc:
                 return self._json(400, {"error": str(exc)})
 
+        if self.path == "/api/e2e/register":
+            if self.client_address[0] not in ("127.0.0.1", "::1"):
+                return self._json(403, {"error": "E2E harness registration must be performed on KRISHNA PC"})
+            project = str(data.get("project", "")).strip()
+            if not project:
+                return self._json(400, {"error": "project is required"})
+            try:
+                return self._json(200, orch.register_e2e_test_harness(project))
+            except KeyError:
+                return self._json(404, {"error": "project not registered"})
+            except PermissionError as exc:
+                return self._json(403, {"error": str(exc)})
+            except (OSError, ValueError) as exc:
+                return self._json(400, {"error": str(exc)})
+
         if self.path == "/api/projects/index":
             project = str(data.get("project", "")).strip()
             if not project:
