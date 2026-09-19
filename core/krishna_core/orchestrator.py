@@ -18,6 +18,7 @@ from .evidence_collectors import LocalEvidenceCollectors
 from .shadow_workspace import ShadowWorkspaceManager
 from .repair_agent import RepairAgent
 from .reviewer import VerificationReviewer
+from .neural_action_graph import NeuralActionGraph
 
 
 class Orchestrator:
@@ -38,6 +39,7 @@ class Orchestrator:
         self.indexer = RepositoryIndexer()
         self.shadow = ShadowWorkspaceManager()
         self.reviewer = VerificationReviewer()
+        self.neural = NeuralActionGraph()
         self._verification_checks = {}
         self.repair_agent = RepairAgent(
             self.investigate,
@@ -241,9 +243,31 @@ Evidence:
         self.memory.audit("knowledge_ingest", "complete", f"{project}:{source}:{result}")
         return result
 
+    def handle_event(self, source, kind, detail="", severity="info", project="system", payload=None):
+        routed = self.neural.ingest(
+            source=source, kind=kind, detail=detail, severity=severity,
+            project=project, payload=payload or {},
+        )
+        event = routed["event"]
+        intent = routed["intent"]
+        self.memory.remember(project, "neural_event", detail or kind, {
+            "event_id": event["id"], "source": source, "kind": kind,
+            "severity": severity, "intent": intent["name"],
+        })
+        self.memory.audit(event["id"], "neural_routed", f"{kind}->{intent['name']}")
+        return routed
+
+    def neural_state(self):
+        return self.neural.snapshot()
+
     def handle(self, message, project="general"):
         task_id = str(uuid.uuid4())
         self.memory.audit(task_id, "received", message)
+        neural = self.handle_event(
+            "conversation", "user_command", message,
+            severity="notice", project=project,
+            payload={"task_id": task_id},
+        )
         context = self.memory.recall(project, 12)
         incidents = self.memory.incidents(project, 5)
         p = self.projects.get(project)
@@ -257,6 +281,7 @@ For registered projects, prefer evidence, shadow testing, verification, rollback
 Project: {project}
 Recent memory: {context}
 Recent incidents: {incidents}
+Neural routing intent: {neural['intent']}
 User: {message}
 
 If the request describes a failure, recommend investigation and evidence collection before modification.
@@ -265,4 +290,4 @@ If it requires an action, describe the bounded action and verification criteria.
         result = self.router.route(prompt, privacy=privacy)
         self.memory.remember(project, "conversation", message, {"task_id": task_id})
         self.memory.audit(task_id, "answered", result["provider"])
-        return {"task_id": task_id, **result}
+        return {"task_id": task_id, "neural_intent": neural["intent"], **result}
