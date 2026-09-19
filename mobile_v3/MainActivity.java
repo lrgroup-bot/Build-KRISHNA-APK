@@ -68,7 +68,7 @@ public class MainActivity extends Activity {
     }
     @JavascriptInterface public String status(){ return call("/api/status",null); }
     @JavascriptInterface public String event(String kind,String detail){
-      return call("/api/core/event","{\\\"source\\\":\\\"mobile\\\",\\\"kind\\\":"+JSONObject.quote(kind)+",\\\"detail\\\":"+JSONObject.quote(detail)+",\\\"project\\\":\\\"system\\\"}");
+      return call("/api/core/event","{\"source\":\"mobile\",\"kind\":"+JSONObject.quote(kind)+",\"detail\":"+JSONObject.quote(detail)+",\"project\":\"system\"}");
     }
     @JavascriptInterface public String state(){ return call("/api/core/state",null); }
     @JavascriptInterface public String chat(String m){ return call(CORE,"{\"message\":"+JSONObject.quote(m)+",\"project\":\"general\"}"); }
