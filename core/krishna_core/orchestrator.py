@@ -260,11 +260,12 @@ Evidence:
     def neural_state(self):
         return self.neural.snapshot()
 
-    def handle(self, message, project="general"):
+    def handle(self, message, project="general", source="pc"):
         task_id = str(uuid.uuid4())
         self.memory.audit(task_id, "received", message)
+        event_kind = "mobile_command" if source == "mobile" else "user_command"
         neural = self.handle_event(
-            "conversation", "user_command", message,
+            source or "pc", event_kind, message,
             severity="notice", project=project,
             payload={"task_id": task_id},
         )
