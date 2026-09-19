@@ -511,6 +511,87 @@ class KrishnaCapabilityTests(unittest.TestCase):
 
 
 
+    def test_e2e_harness_requires_disposable_marker_and_metadata(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "live"; root.mkdir()
+            orch = Orchestrator(db_path=str(Path(td) / "e2e-guard.db"))
+            try:
+                orch.register_project(
+                    "probe", str(root),
+                    allowed_actions=["e2e_write_success", "e2e_write_rollback_probe"],
+                    verification_checks=["e2e_marker_verified"],
+                    metadata={"e2e_test_harness": True},
+                )
+                with self.assertRaises(PermissionError):
+                    orch.register_e2e_test_harness("probe")
+                (root / ".krishna-e2e-disposable").write_text("WRONG", encoding="utf-8")
+                with self.assertRaises(PermissionError):
+                    orch.register_e2e_test_harness("probe")
+                (root / ".krishna-e2e-disposable").write_text("KRISHNA_E2E_DISPOSABLE\n", encoding="utf-8")
+                out = orch.register_e2e_test_harness("probe")
+                self.assertTrue(out["registered"])
+                self.assertEqual(2, len(orch.actions.list("probe")))
+                self.assertTrue(all(x["mutating"] for x in orch.actions.list("probe")))
+            finally:
+                orch.task_ledger.close(); orch.memory.close()
+
+    def test_e2e_harness_proves_shadow_promotion_backup_and_rollback(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "live"; root.mkdir()
+            marker = root / ".krishna-e2e-disposable"
+            marker.write_text("KRISHNA_E2E_DISPOSABLE\n", encoding="utf-8")
+            original = root / "e2e-result.txt"
+            original.write_text("ORIGINAL\n", encoding="utf-8")
+            orch = Orchestrator(db_path=str(Path(td) / "e2e.db"))
+            try:
+                orch.register_project(
+                    "probe", str(root),
+                    allowed_actions=["e2e_write_success", "e2e_write_rollback_probe"],
+                    verification_checks=["e2e_marker_verified"],
+                    metadata={"e2e_test_harness": True},
+                )
+                orch.register_e2e_test_harness("probe")
+                orch.router.route = lambda prompt, privacy="local_only": {"provider": "test", "text": "0.5|observed"}
+
+                # Unit-test the full transaction independent of the process-wide
+                # production mutation switch; run_managed_goal's switch is tested
+                # separately. The promotion manager itself must prove backup/apply.
+                success = orch.run_shadow_repair("probe", "success probe", "e2e_write_success", [])
+                self.assertTrue(success["promotable"])
+                self.assertEqual("ORIGINAL", original.read_text(encoding="utf-8").strip())
+                prepared = orch.prepare_promotion("probe", success["candidate_root"])
+                item = orch._promotion_candidates[prepared["promotion_token"]]
+                policy = orch.projects.get("probe")
+                def verify_live(live_root):
+                    checks = []
+                    for name in policy.verification_checks:
+                        fn = orch._verification_checks[(policy.name, name)]
+                        checks.append((name, lambda fn=fn, live_root=live_root: fn(live_root)))
+                    return orch.verifier.run(checks)
+                promoted = orch.promotions.promote("probe", policy.root, item["candidate_root"], verify_live)
+                self.assertTrue(promoted["promoted"])
+                self.assertFalse(promoted["rolled_back"])
+                self.assertTrue(Path(promoted["backup"]).exists())
+                self.assertEqual("KRISHNA_E2E_PROMOTED", original.read_text(encoding="utf-8").strip())
+
+                rollback = orch.run_shadow_repair("probe", "rollback probe", "e2e_write_rollback_probe", [])
+                self.assertTrue(rollback["promotable"])
+                before = original.read_text(encoding="utf-8")
+                prepared2 = orch.prepare_promotion("probe", rollback["candidate_root"])
+                item2 = orch._promotion_candidates[prepared2["promotion_token"]]
+                rolled = orch.promotions.promote("probe", policy.root, item2["candidate_root"], verify_live)
+                self.assertFalse(rolled["promoted"])
+                self.assertTrue(rolled["rolled_back"])
+                self.assertEqual(before, original.read_text(encoding="utf-8"))
+                self.assertFalse((root / ".krishna-e2e-force-post-fail").exists())
+            finally:
+                orch.task_ledger.close(); orch.memory.close()
+
+    def test_server_exposes_localhost_only_e2e_registration(self):
+        server = (Path(__file__).resolve().parents[1] / "krishna_core" / "server.py").read_text(encoding="utf-8")
+        self.assertIn('if self.path == "/api/e2e/register":', server)
+        self.assertIn('self.client_address[0] not in ("127.0.0.1", "::1")', server)
+
     def test_web_ui_keeps_internal_engines_out_of_manual_navigation(self):
         ui=(Path(__file__).resolve().parents[1]/"web_validation.html").read_text(encoding="utf-8")
         self.assertNotIn("Karma · Work",ui)
