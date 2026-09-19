@@ -15,6 +15,7 @@ from krishna_core.action_registry import ActionRegistry
 from krishna_core.repository_index import RepositoryIndexer
 from krishna_core.shadow_workspace import ShadowWorkspaceManager
 from krishna_core.repair_agent import RepairAgent
+from krishna_core.neural_action_graph import NeuralActionGraph
 
 
 class KrishnaCapabilityTests(unittest.TestCase):
@@ -144,6 +145,34 @@ class KrishnaCapabilityTests(unittest.TestCase):
             self.assertEqual("verified", result["status"])
             self.assertTrue(result["promotable"])
             self.assertEqual("broken", (root / "app.txt").read_text(encoding="utf-8"))
+
+
+    def test_knag_routes_service_failure_to_recovery_investigation(self):
+        graph = NeuralActionGraph()
+        routed = graph.ingest("pc_watcher", "service_down", "127.0.0.1:11434 down", severity="critical")
+        self.assertEqual("investigate_recovery", routed["intent"]["name"])
+        self.assertTrue(routed["intent"]["requires_reasoning"])
+        self.assertFalse(routed["intent"]["mutating"])
+
+    def test_knag_routes_resource_pressure_to_throttle(self):
+        graph = NeuralActionGraph()
+        routed = graph.ingest("pc", "memory_pressure", "91 percent", severity="critical")
+        self.assertEqual("throttle_work", routed["intent"]["name"])
+        self.assertFalse(routed["intent"]["requires_reasoning"])
+
+    def test_knag_mobile_lifecycle_preserves_conversation_first_model(self):
+        graph = NeuralActionGraph()
+        foreground = graph.ingest("mobile", "mobile_foreground", "app visible")
+        background = graph.ingest("mobile", "mobile_background", "app hidden")
+        self.assertEqual("sync_context", foreground["intent"]["name"])
+        self.assertEqual("preserve_state", background["intent"]["name"])
+
+    def test_knag_user_command_escalates_to_reasoning(self):
+        graph = NeuralActionGraph()
+        routed = graph.ingest("conversation", "user_command", "check project")
+        self.assertEqual("reason_about_command", routed["intent"]["name"])
+        self.assertTrue(routed["intent"]["requires_reasoning"])
+        self.assertEqual(1, graph.snapshot()["events_seen"])
 
 
 if __name__ == "__main__":
