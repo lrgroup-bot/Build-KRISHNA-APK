@@ -468,6 +468,20 @@ class KrishnaCapabilityTests(unittest.TestCase):
                 orch.task_ledger.close(); orch.memory.close()
 
 
+
+    def test_orchestrator_rejects_uncontrolled_promotion_candidate(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)/"live"; root.mkdir(); (root/"a.txt").write_text("old",encoding="utf-8")
+            outside=Path(td)/"outside"; outside.mkdir(); (outside/"a.txt").write_text("new",encoding="utf-8")
+            orch=Orchestrator(db_path=str(Path(td)/"safe.db"))
+            try:
+                orch.register_project("demo",str(root))
+                with self.assertRaises(PermissionError):
+                    orch.prepare_promotion("demo",outside)
+            finally:
+                orch.task_ledger.close(); orch.memory.close()
+
+
     def test_promotion_manager_promotes_verified_candidate_with_backup(self):
         with tempfile.TemporaryDirectory() as td:
             live=Path(td)/"live"; candidate=Path(td)/"candidate"; backups=Path(td)/"backups"
