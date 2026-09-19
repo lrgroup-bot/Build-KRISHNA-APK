@@ -1,16 +1,54 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<style>*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#020914;color:#e9fbff;font-family:Arial,sans-serif}.app{height:100%;display:flex;flex-direction:column;background:radial-gradient(circle at 50% 36%,#0b456a88,transparent 36%),linear-gradient(#061726,#020914)}header{text-align:center;padding:18px 12px 8px}.brand{letter-spacing:7px;color:#6deeff;font-size:21px;font-weight:900}.state{font-size:10px;color:#82a8b9;letter-spacing:2px;margin-top:7px}.stage{position:relative;flex:1;min-height:0}.stage canvas{width:100%!important;height:100%!important;display:block}.bubble{position:absolute;right:16px;top:16px;max-width:65%;padding:10px 12px;border:1px solid #2c88ae;border-radius:15px 15px 4px;background:#061829dd;font-size:12px;line-height:1.35}.missing{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#83a8b9;padding:30px}.missing b{color:#ffc94e}.bottom{padding:10px 14px 18px}.reply{min-height:48px;max-height:17vh;overflow:auto;text-align:center;font-size:14px;line-height:1.4;padding:7px 10px;color:#dffaff}.composer{display:flex;gap:8px;background:#041623;border:1px solid #1d7998;border-radius:18px;padding:7px}.composer input{flex:1;min-width:0;background:transparent;color:#fff;border:0;outline:0;padding:10px}.composer button{width:45px;border-radius:50%;border:1px solid #40dff4;background:#073148;color:#bdf9ff}.good{color:#50f0ac}.bad{color:#ff7189}</style>
-<script type="importmap">{"imports":{"three":"./three/three.module.js"}}</script></head><body><div class="app"><header><div class="brand">KRISHNA</div><div id="state" class="state">CONNECTING</div></header><section id="stage" class="stage"><div id="missing" class="missing"><div><b>3D avatar waiting for PC sync</b><br><br>KRISHNA will load the rigged model from your trusted PC.</div></div><div id="bubble" class="bubble">Radhe Radhe. I am ready.</div></section><footer class="bottom"><div id="reply" class="reply">Talk to KRISHNA.</div><div class="composer"><input id="msg" placeholder="Talk to KRISHNA…" onkeydown="if(event.key==='Enter')send()"><button onclick="listen()">🎙</button><button onclick="send()">➤</button></div></footer></div>
-<script type="module">
-import * as THREE from 'three';import {GLTFLoader} from './three/GLTFLoader.js';
-let scene,camera,renderer,avatar,mixer,clips={},action=null,mode='FLUTE',clock=new THREE.Clock();const stage=document.getElementById('stage'),missing=document.getElementById('missing');
-function init(){scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(32,1,.01,100);camera.position.set(0,1.2,4.8);renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;stage.prepend(renderer.domElement);scene.add(new THREE.HemisphereLight(0xccefff,0x061018,2));const l=new THREE.DirectionalLight(0xffe6aa,3);l.position.set(3,4,4);scene.add(l);const r=new THREE.DirectionalLight(0x45cfff,2);r.position.set(-3,2,2);scene.add(r);new ResizeObserver(()=>{const b=stage.getBoundingClientRect();renderer.setSize(b.width,b.height,false);camera.aspect=b.width/b.height;camera.updateProjectionMatrix()}).observe(stage);loadAvatar();tick()}
-function loadAvatar(){try{const b64=Krishna.avatarBase64();if(!b64)return;const bin=atob(b64),u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);new GLTFLoader().parse(u.buffer,'',g=>{missing.style.display='none';avatar=g.scene;scene.add(avatar);const box=new THREE.Box3().setFromObject(avatar),sz=box.getSize(new THREE.Vector3()),c=box.getCenter(new THREE.Vector3());avatar.position.sub(c);avatar.scale.setScalar(2.8/Math.max(sz.y,.1));avatar.position.y=-1.2;mixer=new THREE.AnimationMixer(avatar);g.animations.forEach(x=>clips[x.name.toUpperCase()]=x);setMode(mode)},()=>{});}catch(e){}}
-function setMode(m,text){mode=m||'FLUTE';document.getElementById('state').textContent=mode;if(text)document.getElementById('bubble').textContent=text;if(mixer){if(action)action.fadeOut(.15);const c=clips[mode];action=c?mixer.clipAction(c):null;if(action)action.reset().fadeIn(.15).play()}}
-function tick(){requestAnimationFrame(tick);const dt=clock.getDelta(),t=performance.now()/1000;if(mixer)mixer.update(dt);if(avatar&&!action){if(mode==='FLUTE')avatar.rotation.y=Math.sin(t*.35)*.08;if(mode==='SEARCH')avatar.rotation.y=Math.sin(t*.8)*.18;if(mode==='CHAT')avatar.rotation.z=Math.sin(t*3)*.015;if(mode==='WORKING')avatar.rotation.y=Math.sin(t*1.4)*.10}renderer.render(scene,camera)}
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#020914;color:#e9fbff;font-family:Arial,sans-serif}
+.app{height:100%;display:flex;flex-direction:column;background:radial-gradient(circle at 50% 35%,#123e66aa,transparent 36%),linear-gradient(#061726,#020914)}
+header{text-align:center;padding:16px 12px 7px}.brand{letter-spacing:7px;color:#f2c96f;font-size:22px;font-weight:900}.state{font-size:10px;color:#82a8b9;letter-spacing:2px;margin-top:7px}
+.stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;touch-action:none;overflow:hidden}
+.halo{position:absolute;width:min(68vw,330px);aspect-ratio:1;border:2px solid #f2c96f88;border-radius:50%;box-shadow:0 0 45px #43bff255,inset 0 0 35px #43bff222}
+.avatarViewport{position:relative;height:min(59vh,560px);aspect-ratio:1/3;overflow:hidden;z-index:2;filter:drop-shadow(0 16px 22px #000a);user-select:none}
+.sprite{height:100%;width:800%;display:block;transform:translateX(0);transition:transform .18s ease-out;pointer-events:none}
+.viewLabel{position:absolute;left:50%;bottom:7px;transform:translateX(-50%);z-index:4;font-size:9px;letter-spacing:2px;color:#f4d88b;background:#020914bb;border:1px solid #8b733c66;border-radius:20px;padding:5px 8px}
+.bubble{position:absolute;right:14px;top:12px;z-index:5;max-width:58%;padding:9px 11px;border:1px solid #2c88ae;border-radius:15px 15px 4px;background:#061829dd;font-size:12px;line-height:1.35}
+.rotateHint{position:absolute;left:14px;top:14px;z-index:5;font-size:9px;letter-spacing:1.4px;color:#7fb3c5}
+.stage.working .halo{animation:pulse 1.2s infinite alternate}.stage.chat .halo{animation:pulse .7s infinite alternate}@keyframes pulse{from{transform:scale(.96);opacity:.65}to{transform:scale(1.03);opacity:1}}
+.bottom{padding:8px 14px 16px}.reply{min-height:44px;max-height:16vh;overflow:auto;text-align:center;font-size:14px;line-height:1.4;padding:6px 10px;color:#dffaff}
+.composer{display:flex;gap:8px;background:#041623;border:1px solid #1d7998;border-radius:18px;padding:7px}.composer input{flex:1;min-width:0;background:transparent;color:#fff;border:0;outline:0;padding:10px}.composer button{width:45px;border-radius:50%;border:1px solid #40dff4;background:#073148;color:#bdf9ff}.good{color:#50f0ac}.bad{color:#ff7189}
+</style></head>
+<body><div class="app">
+<header><div class="brand">KRISHNA</div><div id="state" class="state">CONNECTING</div></header>
+<section id="stage" class="stage">
+  <div class="halo"></div>
+  <div id="rotateHint" class="rotateHint">SWIPE TO ROTATE · 360°</div>
+  <div id="avatarViewport" class="avatarViewport">
+    <img id="avatarSprite" class="sprite" src="krishna_child_360.webp" alt="KRISHNA child avatar">
+    <div id="viewLabel" class="viewLabel">FRONT</div>
+  </div>
+  <div id="bubble" class="bubble">Radhe Radhe. I am ready.</div>
+</section>
+<footer class="bottom"><div id="reply" class="reply">Talk to KRISHNA.</div><div class="composer"><input id="msg" placeholder="Talk to KRISHNA…" onkeydown="if(event.key==='Enter')send()"><button onclick="listen()">🎙</button><button onclick="send()">➤</button></div></footer>
+</div>
+<script>
+const labels=['FRONT','FRONT-RIGHT','RIGHT','BACK-RIGHT','BACK','BACK-LEFT','LEFT','FRONT-LEFT'];
+let view=0,drag=false,startX=0,startView=0,mode='FLUTE',lastManual=0,autoTimer=null;
+const stage=document.getElementById('stage'),sprite=document.getElementById('avatarSprite'),label=document.getElementById('viewLabel'),vp=document.getElementById('avatarViewport');
+
+function showView(i,manual=false){view=(i%8+8)%8;sprite.style.transform='translateX('+(-view*12.5)+'%)';label.textContent=labels[view];if(manual)lastManual=Date.now()}
+function step(delta,manual=true){showView(view+delta,manual)}
+vp.addEventListener('pointerdown',e=>{drag=true;startX=e.clientX;startView=view;vp.setPointerCapture(e.pointerId)});
+vp.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-startX;const steps=Math.round(-dx/34);showView(startView+steps,true)});
+vp.addEventListener('pointerup',()=>drag=false);vp.addEventListener('pointercancel',()=>drag=false);
+function startAuto(){clearInterval(autoTimer);autoTimer=setInterval(()=>{if(mode==='FLUTE'&&Date.now()-lastManual>4500&&!drag)step(1,false)},2600)}
+
+function setMode(m,text){
+  mode=m||'FLUTE';document.getElementById('state').textContent=mode;
+  stage.classList.toggle('working',mode==='WORKING'||mode==='SEARCH');stage.classList.toggle('chat',mode==='CHAT');
+  if(text)document.getElementById('bubble').textContent=text;
+  if(mode==='CHAT')showView(0,false);else if(mode==='WORKING')showView(1,false);else if(mode==='SEARCH')showView(2,false);
+}
 window.send=()=>{const i=document.getElementById('msg'),q=i.value.trim();if(!q)return;i.value='';setMode('CHAT','Listening…');setTimeout(()=>{try{const d=JSON.parse(Krishna.chat(q));if(d.error)throw new Error(d.error);const text=d.reply||d.text||'Done';document.getElementById('reply').textContent=text;setMode(d.avatar_state||'CHAT',text);speak(text)}catch(e){document.getElementById('reply').innerHTML='<span class=bad>'+e.message+'</span>'}},20)}
 window.listen=()=>{if(!Krishna.voiceEnrolled()){document.getElementById('reply').textContent='Speak naturally for a few seconds to register the local owner voice profile.';setTimeout(()=>{const d=JSON.parse(Krishna.enrollVoice());document.getElementById('reply').textContent=d.error||'Voice profile registered locally. Tap the microphone again.'},100);return}if(!('webkitSpeechRecognition'in window)){document.getElementById('reply').textContent='Speech recognition unavailable; type your request.';return}const r=new webkitSpeechRecognition();r.lang='or-IN';r.interimResults=true;r.onstart=()=>setMode('CHAT','LISTENING');r.onresult=e=>{let t='';for(let k=e.resultIndex;k<e.results.length;k++)t+=e.results[k][0].transcript;document.getElementById('reply').textContent=t;if(e.results[e.results.length-1].isFinal){document.getElementById('msg').value=t.replace(/^krishna[ ,]*/i,'');send()}};r.onerror=e=>document.getElementById('reply').textContent='Voice: '+e.error;r.start()}
 function speak(t){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang=/[\u0B00-\u0B7F]/.test(t)?'or-IN':'en-IN';speechSynthesis.speak(u)}catch(e){}}
 function poll(){try{const link=JSON.parse(Krishna.connection());if(link.error||!link.connected)throw new Error(link.error||'Backend link not confirmed');const d=JSON.parse(Krishna.state());if(d.error)throw new Error(d.error);setMode(d.operator?.avatar_state||'FLUTE',d.operator?.current?.task||'Radhe Radhe. I am ready.');document.getElementById('state').className='state good'}catch(e){document.getElementById('state').textContent='PC OFFLINE';document.getElementById('state').className='state bad'}}
-init();poll();setInterval(poll,5000);window.onerror=(m,s,l)=>{try{Krishna.log('JS '+m+' '+s+':'+l)}catch(e){}};
+showView(0);startAuto();poll();setInterval(poll,5000);window.onerror=(m,s,l)=>{try{Krishna.log('JS '+m+' '+s+':'+l)}catch(e){}};
 </script></body></html>
