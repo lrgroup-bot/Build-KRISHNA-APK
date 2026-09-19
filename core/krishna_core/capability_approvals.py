@@ -14,3 +14,7 @@ class CapabilityApprovals:
   return {"device_id":device_id,"capabilities":caps}
  def require(self,device_id,cap):
   if cap not in self.approved(device_id):raise PermissionError("device capability not approved: "+cap)
+
+ def close(self):
+  with self.lock:
+   if self.db is not None:self.db.commit();self.db.close();self.db=None
