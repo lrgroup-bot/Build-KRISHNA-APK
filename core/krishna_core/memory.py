@@ -121,6 +121,12 @@ class MemoryStore:
             )
             self.db.commit()
 
+    def delete_project(self, name):
+        with self.lock:
+            cur = self.db.execute("DELETE FROM project_workspaces WHERE name=?", (name,))
+            self.db.commit()
+            return bool(cur.rowcount)
+
     def projects(self):
         with self.lock:
             cur = self.db.execute(
