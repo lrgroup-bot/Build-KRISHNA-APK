@@ -17,6 +17,7 @@ public class MainActivity extends Activity {
   static final String CORE="/api/core/chat";
   static final String SPEAKER_ENGINE="LOCAL_VOICE_PROFILE_V2";
   WebView web;
+  Bridge bridge;
 
   @Override public void onCreate(Bundle b){
     super.onCreate(b);
@@ -35,9 +36,25 @@ public class MainActivity extends Activity {
         });
       }
     });
-    web.addJavascriptInterface(new Bridge(),"Krishna");
+    bridge=new Bridge();
+    web.addJavascriptInterface(bridge,"Krishna");
     setContentView(web);
     web.loadUrl("file:///android_asset/index.html");
+  }
+
+  void emitAsync(String kind,String detail){
+    if(bridge==null)return;
+    new Thread(()->bridge.event(kind,detail)).start();
+  }
+
+  @Override protected void onResume(){
+    super.onResume();
+    emitAsync("mobile_foreground","KRISHNA Mobile entered foreground");
+  }
+
+  @Override protected void onPause(){
+    emitAsync("mobile_background","KRISHNA Mobile entered background");
+    super.onPause();
   }
 
   public class Bridge {
@@ -50,6 +67,9 @@ public class MainActivity extends Activity {
       }
     }
     @JavascriptInterface public String status(){ return call("/api/status",null); }
+    @JavascriptInterface public String event(String kind,String detail){
+      return call("/api/core/event","{\"source\":\"mobile\",\"kind\":"+JSONObject.quote(kind)+",\"detail\":"+JSONObject.quote(detail)+",\"project\":\"system\"}");
+    }
     @JavascriptInterface public String state(){ return call("/api/core/state",null); }
     @JavascriptInterface public String chat(String m){ return call(CORE,"{\"message\":"+JSONObject.quote(m)+",\"project\":\"general\"}"); }
     @JavascriptInterface public String avatarBase64(){
@@ -62,6 +82,7 @@ public class MainActivity extends Activity {
       try{
         String fp=VoicePrint.capture(MainActivity.this,3200);
         getSharedPreferences("k",0).edit().putString("voiceprint",fp).putString("speaker_engine",SPEAKER_ENGINE).putBoolean("voice_enrolled",true).apply();
+        event("voice_enrolled","Local owner voice profile enrolled");
         return "{\"ok\":true}";
       }catch(Exception e){ return "{\"error\":"+JSONObject.quote(String.valueOf(e.getMessage()))+"}"; }
     }

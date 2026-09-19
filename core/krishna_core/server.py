@@ -27,6 +27,11 @@ def on_transition(transition):
     mark("WATCHER TRANSITION", f"{target} -> {status}")
     orch.memory.remember("system", "watcher_transition", f"{target} -> {status}", transition)
     orch.memory.audit("watcher", "transition", json.dumps(transition))
+    orch.handle_event(
+        "pc_watcher", "service_recovered" if transition["to"] else "service_down",
+        f"{target} -> {status}", severity="notice" if transition["to"] else "critical",
+        project="system", payload=transition,
+    )
 
 
 watcher = Watcher(on_transition=on_transition)
@@ -115,6 +120,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"actions": orch.actions.list(project)})
         if path == "/api/resources":
             return self._json(200, orch.governor.snapshot())
+        if path in ("/api/core/neural-state", "/api/neural/state"):
+            return self._json(200, orch.neural_state())
         if path == "/api/project-graph":
             return self._json(200, orch.graph.snapshot())
         if path == "/api/recovery/ladder":
@@ -129,6 +136,23 @@ class Handler(BaseHTTPRequestHandler):
             data = self._body()
         except Exception as exc:
             return self._json(400, {"error": f"invalid json: {exc}"})
+
+        if self.path in ("/api/core/event", "/api/neural/event"):
+            source = str(data.get("source", "unknown")).strip() or "unknown"
+            kind = str(data.get("kind", "event")).strip() or "event"
+            detail = str(data.get("detail", ""))
+            severity = str(data.get("severity", "info"))
+            project = str(data.get("project", "system"))
+            return self._json(200, orch.handle_event(
+                source, kind, detail, severity=severity, project=project,
+                payload=data.get("payload") or {},
+            ))
+
+        if self.path in ("/api/mobile-log",):
+            event = str(data.get("event", ""))
+            return self._json(200, orch.handle_event(
+                "mobile", "mobile_log", event, severity="info", project="system",
+            ))
 
         if self.path in ("/v1/chat", "/api/core/chat"):
             msg = data.get("message", "")

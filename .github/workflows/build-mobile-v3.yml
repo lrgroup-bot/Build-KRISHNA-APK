@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - feature/krishna-v3-live-avatar
+      - feature/knag-pc-mobile
+  pull_request:
+    paths:
+      - 'mobile_v3/**'
+      - 'app/src/main/res/**'
+      - '.github/workflows/build-mobile-v3.yml'
 jobs:
   build:
     runs-on: ubuntu-latest
