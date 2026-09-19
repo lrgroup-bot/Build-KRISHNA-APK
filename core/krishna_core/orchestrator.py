@@ -49,7 +49,8 @@ class Orchestrator:
         self.skills = SkillRegistry([Path(__file__).resolve().parents[1] / "skills"])
         repo_root = Path(__file__).resolve().parents[2]
         specialist_root = repo_root / "external" / "agency-agents"
-        specialist_state = Path(settings.db_path).resolve().parent / ".krishna_state"\n        self.specialists = SpecialistLibrary(specialist_state, specialist_root)
+        specialist_state = Path(settings.db_path).resolve().parent / ".krishna_state"
+        self.specialists = SpecialistLibrary(specialist_state, specialist_root)
         if specialist_root.exists() and not self.specialists.items:
             try:
                 self.specialists.index()
