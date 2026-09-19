@@ -19,6 +19,9 @@ from .shadow_workspace import ShadowWorkspaceManager
 from .repair_agent import RepairAgent
 from .reviewer import VerificationReviewer
 from .neural_action_graph import NeuralActionGraph
+from .browser_operator import BrowserOperator
+from .github_research import GitHubResearchAgent
+from .goal_evaluator import GoalEvaluator
 
 
 class Orchestrator:
@@ -40,6 +43,9 @@ class Orchestrator:
         self.shadow = ShadowWorkspaceManager()
         self.reviewer = VerificationReviewer()
         self.neural = NeuralActionGraph()
+        self.browser = BrowserOperator()
+        self.research = GitHubResearchAgent()
+        self.goal_evaluator = GoalEvaluator()
         self._verification_checks = {}
         self.repair_agent = RepairAgent(
             self.investigate,
@@ -236,6 +242,36 @@ Evidence:
             primary_provider="",
             reviewer_provider="",
         )
+        return result
+
+    def inspect_ui(self, project, url, actions=None, screenshot_path=None):
+        report = self.browser.inspect(url, actions=actions or [], screenshot_path=screenshot_path)
+        self.memory.remember(project, "browser_inspection", url, {
+            "ok": report.get("ok"),
+            "title": report.get("title"),
+            "findings": report.get("findings", [])[:20],
+        })
+        self.memory.audit("browser_inspection", "complete" if report.get("ok") else "findings", f"{project}:{url}")
+        if report.get("findings"):
+            self.handle_event(
+                "browser_operator", "ui_error", f"{project}: {len(report['findings'])} browser findings",
+                severity="notice", project=project, payload={"url": url, "findings": report["findings"][:20]},
+            )
+        return report
+
+    def research_github(self, project, query, limit=10):
+        result = self.research.search(query, limit=limit)
+        self.memory.remember(project, "github_research", query, {
+            "count": result.get("count", 0),
+            "candidates": result.get("candidates", [])[:10],
+        })
+        self.memory.audit("github_research", "complete", f"{project}:{query}")
+        return result
+
+    def evaluate_goal(self, project, goal, checks):
+        result = self.goal_evaluator.evaluate(goal, checks)
+        self.memory.remember(project, "goal_evaluation", goal, result)
+        self.memory.audit("goal_evaluation", result["conclusion"], project)
         return result
 
     def ingest_knowledge(self, project, source, text, metadata=None):

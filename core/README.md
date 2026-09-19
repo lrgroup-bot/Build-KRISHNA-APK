@@ -88,3 +88,39 @@ Cloud fallback is blocked for `local_only` and `restricted` registered projects.
 KRISHNA must not report work as completed merely because code changed; completion requires verification evidence.
 
 Secrets stay outside Git in environment variables or local config.
+
+
+## KRISHNA.exe conversation console
+
+KRISHNA can be packaged as a Windows conversation-first executable. The console is intentionally simple: the user talks to KRISHNA while the Core performs project work behind the conversation.
+
+Console commands:
+
+- `/status` - core, watcher and resource state
+- `/project NAME` - select the project KRISHNA is operating on
+- `/projects` - registered project list
+- `/index` - update repository intelligence for the active project
+- `/inspect URL` - open the real UI in Chrome/Chromium and collect console, page, request and HTTP errors
+- `/investigate PROBLEM` - run evidence -> hypothesis investigation
+- `/research QUERY` - search GitHub for components relevant to the active project
+- `/incidents` - recent learned incidents and repairs
+
+Normal text is sent directly to KRISHNA as conversation.
+
+## Autonomous UI + repository research
+
+The Chromium operator inspects actual application behavior rather than judging only source code. It can collect:
+
+- JavaScript console errors
+- uncaught page exceptions
+- failed network requests
+- HTTP 4xx/5xx responses
+- visible rendered text
+- optional screenshots
+- scripted click/fill/press/wait flows
+
+The GitHub research agent ranks candidates using repository activity, adoption and license metadata. Research is not permission to copy code directly into production. Candidate integration follows:
+
+Research -> license/security/dependency review -> shadow integration -> build/tests -> Chromium/backend verification -> goal evaluation -> promotion.
+
+The goal evaluator only declares a task complete when every explicit acceptance check passes. Removing an exception is not enough if the requested user workflow is still broken.
