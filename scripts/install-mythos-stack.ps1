@@ -53,21 +53,44 @@ $AgentPython = Join-Path $AgentVenv "Scripts\python.exe"
 Run-Checked -Exe $AgentPython -Arguments @("-m","pip","install","--upgrade","pip")
 Run-Checked -Exe $AgentPython -Arguments @("-m","pip","install","--upgrade","mini-swe-agent","swe-rex")
 
-Write-Step "Hardening dedicated NTFS location for codebase-memory"
-try {
-  if (Test-Path $CbmRoot) {
-    & icacls $CbmRoot /inheritance:r | Out-Null
-    & icacls $CbmRoot /grant:r "$env:USERNAME:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" | Out-Null
+Write-Step "Installing Codebase Memory from official GitHub release"
+$release = Invoke-RestMethod -UseBasicParsing -Uri "https://api.github.com/repos/DeusData/codebase-memory-mcp/releases/latest"
+$arch = if ($env:PROCESSOR_ARCHITECTURE -match "ARM64") { "arm64" } else { "amd64" }
+$assetName = "codebase-memory-mcp-windows-$arch.zip"
+$asset = $release.assets | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
+if (-not $asset) { throw "Could not find official Codebase Memory asset $assetName" }
+
+$cbmZip = Join-Path $env:TEMP $assetName
+$cbmExtract = Join-Path $env:TEMP ("krishna-cbm-" + [guid]::NewGuid().ToString("N"))
+Invoke-WebRequest -UseBasicParsing -Uri $asset.browser_download_url -OutFile $cbmZip
+
+if ($asset.digest -and $asset.digest.StartsWith("sha256:")) {
+  $expected = $asset.digest.Substring(7).ToLowerInvariant()
+  $actual = (Get-FileHash -Algorithm SHA256 -Path $cbmZip).Hash.ToLowerInvariant()
+  if ($actual -ne $expected) {
+    Remove-Item $cbmZip -Force -ErrorAction SilentlyContinue
+    throw "Codebase Memory SHA-256 verification failed"
   }
-} catch {
-  Write-Warn "Could not fully harden ACLs automatically: $($_.Exception.Message)"
+  Write-Ok "Codebase Memory release SHA-256 verified"
+} else {
+  throw "Official Codebase Memory release did not publish a SHA-256 digest"
 }
 
-Write-Step "Installing codebase-memory-mcp into $CbmRoot"
-$cbmInstaller = Join-Path $env:TEMP "krishna-codebase-memory-install.ps1"
-Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.ps1" -OutFile $cbmInstaller
-powershell -NoProfile -ExecutionPolicy Bypass -File $cbmInstaller "--dir=$CbmRoot" --skip-config
-if ($LASTEXITCODE -ne 0 -and -not (Test-Path (Join-Path $CbmRoot "codebase-memory-mcp.exe"))) { throw "codebase-memory-mcp install failed" }
+New-Item -ItemType Directory -Force -Path $cbmExtract | Out-Null
+Expand-Archive -LiteralPath $cbmZip -DestinationPath $cbmExtract -Force
+$cbmExeSource = Get-ChildItem -LiteralPath $cbmExtract -Filter "codebase-memory-mcp.exe" -File -Recurse | Select-Object -First 1
+if (-not $cbmExeSource) { throw "codebase-memory-mcp.exe not found in official release archive" }
+
+New-Item -ItemType Directory -Force -Path $CbmRoot | Out-Null
+$cbmExeDest = Join-Path $CbmRoot "codebase-memory-mcp.exe"
+Copy-Item -LiteralPath $cbmExeSource.FullName -Destination $cbmExeDest -Force
+Remove-Item $cbmExtract -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item $cbmZip -Force -ErrorAction SilentlyContinue
+
+if (-not (Test-Path $cbmExeDest)) { throw "Codebase Memory binary copy failed" }
+$cbmVersion = (& $cbmExeDest --version 2>&1 | Out-String).Trim()
+Write-Ok "Codebase Memory installed directly at $cbmExeDest"
+if ($cbmVersion) { Write-Host $cbmVersion }
 
 if (-not $SkipCua) {
   Write-Step "Installing CUA Driver into $CuaRoot"
