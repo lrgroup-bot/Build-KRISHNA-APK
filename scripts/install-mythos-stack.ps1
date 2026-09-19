@@ -12,7 +12,17 @@ function Write-Step([string]$Text) { Write-Host "[KRISHNA] $Text" -ForegroundCol
 function Write-Ok([string]$Text) { Write-Host "[OK] $Text" -ForegroundColor Green }
 function Write-Warn([string]$Text) { Write-Host "[WARN] $Text" -ForegroundColor Yellow }
 function Has-Cmd([string]$Name) { return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue) }
-function Run-Checked([string]$Exe, [string[]]$Args) { & $Exe @Args; if ($LASTEXITCODE -ne 0) { throw "$Exe failed with exit code $LASTEXITCODE" } }
+
+function Run-Checked {
+  param(
+    [Parameter(Mandatory=$true)][string]$Exe,
+    [Parameter(Mandatory=$false)][string[]]$Arguments = @()
+  )
+  & $Exe @Arguments
+  $code = $LASTEXITCODE
+  if ($null -eq $code) { $code = 0 }
+  if ($code -ne 0) { throw "$Exe failed with exit code $code" }
+}
 
 New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
 
@@ -22,19 +32,19 @@ if (-not (Has-Cmd "python")) { throw "Python 3.10+ is required." }
 if (-not (Has-Cmd "npm")) { throw "Node.js/npm is required." }
 
 Write-Step "Installing mythos-agent"
-Run-Checked "npm" @("install","-g","mythos-agent")
+Run-Checked -Exe "npm" -Arguments @("install","-g","mythos-agent")
 Write-Ok "mythos-agent installed"
 
 Write-Step "Installing CALM MCP"
-Run-Checked "npm" @("install","-g","@eilodon/calm-mcp")
+Run-Checked -Exe "npm" -Arguments @("install","-g","@eilodon/calm-mcp")
 Write-Ok "CALM installed"
 
 Write-Step "Installing mini-SWE-agent"
-Run-Checked "python" @("-m","pip","install","--upgrade","mini-swe-agent")
+Run-Checked -Exe "python" -Arguments @("-m","pip","install","--upgrade","mini-swe-agent")
 Write-Ok "mini-SWE-agent installed"
 
 Write-Step "Installing SWE-ReX"
-Run-Checked "python" @("-m","pip","install","--upgrade","swe-rex")
+Run-Checked -Exe "python" -Arguments @("-m","pip","install","--upgrade","swe-rex")
 Write-Ok "SWE-ReX installed"
 
 Write-Step "Installing codebase-memory-mcp using the official Windows installer"
@@ -61,13 +71,17 @@ if (-not $SkipArise) {
   Write-Step "Installing ARISE into an isolated virtual environment"
   $ariseDir = Join-Path $InstallRoot "ARISE"
   if (-not (Test-Path (Join-Path $ariseDir ".git"))) {
-    Run-Checked "git" @("clone","https://github.com/FARD-Lab/ARISE.git",$ariseDir)
-  } else { Run-Checked "git" @("-C",$ariseDir,"pull","--ff-only") }
+    Run-Checked -Exe "git" -Arguments @("clone","https://github.com/FARD-Lab/ARISE.git",$ariseDir)
+  } else {
+    Run-Checked -Exe "git" -Arguments @("-C",$ariseDir,"pull","--ff-only")
+  }
   $venvDir = Join-Path $ariseDir ".venv"
-  if (-not (Test-Path $venvDir)) { Run-Checked "python" @("-m","venv",$venvDir) }
+  if (-not (Test-Path $venvDir)) {
+    Run-Checked -Exe "python" -Arguments @("-m","venv",$venvDir)
+  }
   $arisePython = Join-Path $venvDir "Scripts\python.exe"
-  Run-Checked $arisePython @("-m","pip","install","--upgrade","pip")
-  Run-Checked $arisePython @("-m","pip","install","-e",$ariseDir)
+  Run-Checked -Exe $arisePython -Arguments @("-m","pip","install","--upgrade","pip")
+  Run-Checked -Exe $arisePython -Arguments @("-m","pip","install","-e",$ariseDir)
   Write-Ok "ARISE installed in $venvDir"
 }
 
@@ -76,8 +90,11 @@ if (-not $SkipGoose) {
   $bash = Get-Command bash -ErrorAction SilentlyContinue
   if ($bash) {
     & $bash.Source -lc "curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | bash"
-    if ($LASTEXITCODE -eq 0) { Write-Ok "Goose CLI installed" } else { Write-Warn "Goose installer returned exit code $LASTEXITCODE" }
-  } else { Write-Warn "Bash not found. Goose CLI skipped; install Git Bash/MSYS2 or Goose Desktop later." }
+    if ($LASTEXITCODE -eq 0) { Write-Ok "Goose CLI installed" }
+    else { Write-Warn "Goose installer returned exit code $LASTEXITCODE" }
+  } else {
+    Write-Warn "Bash not found. Goose CLI skipped; install Git Bash/MSYS2 or Goose Desktop later."
+  }
 }
 
 $envFile = Join-Path $env:USERPROFILE ".krishna\mythos-stack.env"
