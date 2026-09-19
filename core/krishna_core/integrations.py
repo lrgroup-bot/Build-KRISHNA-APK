@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
+from pathlib import Path
 import os
 import shutil
 import subprocess
@@ -45,7 +46,40 @@ class IntegrationRegistry:
         "goose": "KRISHNA_GOOSE_CMD",
     }
 
+    @staticmethod
+    def _load_local_env() -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        candidates = [
+            repo_root / "config" / "mythos-stack.env",
+            Path(os.getenv("KRISHNA_CONFIG_ROOT", "")) / "mythos-stack.env"
+            if os.getenv("KRISHNA_CONFIG_ROOT") else None,
+        ]
+        for path in candidates:
+            if not path or not path.is_file():
+                continue
+            for raw in path.read_text(encoding="utf-8-sig").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                if key and value and key not in os.environ:
+                    os.environ[key] = value
+            break
+
+    @staticmethod
+    def _resolve_command(cmd: str) -> str | None:
+        if not cmd:
+            return None
+        expanded = os.path.expandvars(os.path.expanduser(cmd))
+        p = Path(expanded)
+        if p.is_file():
+            return str(p)
+        return shutil.which(expanded)
+
     def __init__(self):
+        self._load_local_env()
         self._commands: Dict[str, str] = {}
         for name, (default, _, _) in self.DEFAULTS.items():
             self._commands[name] = os.getenv(self.ENV_OVERRIDES[name], default).strip()
@@ -56,8 +90,7 @@ class IntegrationRegistry:
         return self._commands[name]
 
     def available(self, name: str) -> bool:
-        cmd = self.command(name)
-        return bool(cmd and shutil.which(cmd))
+        return self._resolve_command(self.command(name)) is not None
 
     def statuses(self) -> List[dict]:
         out = []
@@ -66,7 +99,7 @@ class IntegrationRegistry:
             out.append(asdict(ToolStatus(
                 name=name,
                 command=cmd,
-                available=bool(cmd and shutil.which(cmd)),
+                available=self._resolve_command(cmd) is not None,
                 purpose=purpose,
                 license=license_name,
             )))
@@ -75,7 +108,7 @@ class IntegrationRegistry:
     def run(self, name: str, args: List[str], cwd: str | None = None, timeout: int = 120) -> dict:
         """Run a known external adapter without shell expansion."""
         cmd = self.command(name)
-        resolved = shutil.which(cmd)
+        resolved = self._resolve_command(cmd)
         if not resolved:
             return {"ok": False, "available": False, "tool": name, "error": "tool not installed"}
         try:
