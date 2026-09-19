@@ -11,6 +11,10 @@ Set-StrictMode -Version Latest
 
 $KrishnaRoot = [IO.Path]::GetFullPath($KrishnaRoot)
 $coreDir = Join-Path $KrishnaRoot "core"
+$logDir = Join-Path $KrishnaRoot "logs"
+if (-not (Test-Path -LiteralPath $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+$startLog = Join-Path $logDir "START_KRISHNA.log"
+try { Start-Transcript -Path $startLog -Append -Force | Out-Null } catch {}
 
 if (-not (Test-Path -LiteralPath $coreDir)) {
     throw "KRISHNA core directory not found: $coreDir"
@@ -35,6 +39,28 @@ $runCorePy = Join-Path $coreDir "run_core.py"
 if (Test-Path -LiteralPath $desktopExe) {
     Write-Host "Starting KRISHNA.exe..." -ForegroundColor Green
     Start-Process -FilePath $desktopExe -WorkingDirectory $KrishnaRoot
+
+    $online = $false
+    foreach ($i in 1..20) {
+        Start-Sleep -Milliseconds 500
+        try {
+            $status = Invoke-RestMethod -Uri ("http://127.0.0.1:{0}/api/status" -f $Port) -TimeoutSec 2
+            if ($status.ok -and $status.core -eq "ONLINE") {
+                $online = $true
+                Write-Host ("KRISHNA Core: {0}" -f $status.core) -ForegroundColor Green
+                break
+            }
+        } catch {}
+    }
+
+    if (-not $online) {
+        Write-Warning "KRISHNA.exe launched, but Core status was not confirmed on port $Port."
+    }
+    Write-Host ("Start log: {0}" -f $startLog)
+    Write-Host ""
+    Write-Host "Keep this PowerShell window open and send me the output after START_KRISHNA.ps1 runs." -ForegroundColor Yellow
+    try { Stop-Transcript | Out-Null } catch {}
+    Read-Host "Press Enter only after you have copied/sent the output"
     exit 0
 }
 
