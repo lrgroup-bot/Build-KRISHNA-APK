@@ -1,6 +1,8 @@
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 import json, time
 from pathlib import Path
+from urllib.parse import urlparse, parse_qs
+
 from .config import settings
 from .orchestrator import Orchestrator
 from .watcher import Watcher
@@ -10,12 +12,14 @@ started = time.time()
 activity = {"current_activity": "Idle", "updated": time.strftime("%Y-%m-%d %H:%M:%S"), "recent": []}
 DASHBOARD = (Path(__file__).resolve().parents[1] / "dashboard.html")
 
+
 def mark(event, detail=""):
     now = time.strftime("%H:%M:%S")
     activity["current_activity"] = detail or event
     activity["updated"] = time.strftime("%Y-%m-%d %H:%M:%S")
     activity["recent"].insert(0, {"time": now, "event": event + ((": " + detail) if detail else "")})
     del activity["recent"][30:]
+
 
 def on_transition(transition):
     target = transition["target"]
@@ -24,8 +28,10 @@ def on_transition(transition):
     orch.memory.remember("system", "watcher_transition", f"{target} -> {status}", transition)
     orch.memory.audit("watcher", "transition", json.dumps(transition))
 
+
 watcher = Watcher(on_transition=on_transition)
 watcher.start()
+
 
 class Handler(BaseHTTPRequestHandler):
     def _json(self, code, obj):
@@ -51,52 +57,70 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(n) or b"{}")
 
     def do_GET(self):
-        if self.path in ("/", "/dashboard"):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+
+        if path in ("/", "/dashboard"):
             return self._html(200, DASHBOARD.read_text(encoding="utf-8"))
-        if self.path == "/health":
+        if path == "/health":
             return self._json(200, {
                 "ok": True,
                 "watcher": watcher.snapshot(),
+                "resources": orch.governor.snapshot(),
                 "uptime_seconds": int(time.time() - started),
             })
-        if self.path == "/api/dashboard":
+        if path == "/api/dashboard":
             return self._json(200, {
                 "active": True,
                 "core": "ONLINE",
                 "watcher": watcher.snapshot(),
+                "resources": orch.governor.snapshot(),
                 "current_activity": activity["current_activity"],
                 "updated": activity["updated"],
                 "recent": activity["recent"],
                 "uptime_seconds": int(time.time() - started),
             })
-        if self.path == "/api/capabilities":
+        if path == "/api/capabilities":
             return self._json(200, {
                 "operating_loop": [
                     "observe", "understand", "investigate", "research",
-                    "plan", "act", "test", "verify", "learn"
+                    "plan", "act", "shadow_test", "verify", "review", "learn"
                 ],
                 "capabilities": [
+                    "project_registry",
+                    "repository_index",
                     "project_graph",
                     "evidence_engine",
                     "hypothesis_investigation",
                     "persistent_incident_memory",
                     "knowledge_ingestion",
+                    "registered_action_registry",
+                    "shadow_workspace",
+                    "shadow_repair_pipeline",
                     "verification_gates",
+                    "verification_review",
+                    "resource_governor",
+                    "privacy_aware_model_routing",
                     "recovery_ladder",
                     "defensive_security_scan",
                     "watcher_transitions",
-                    "local_cloud_model_routing",
                 ],
                 "mutating_actions_enabled": settings.allow_actions,
             })
-        if self.path == "/api/project-graph":
+        if path == "/api/projects":
+            return self._json(200, {"projects": orch.projects.list()})
+        if path == "/api/actions":
+            project = (query.get("project") or [None])[0]
+            return self._json(200, {"actions": orch.actions.list(project)})
+        if path == "/api/resources":
+            return self._json(200, orch.governor.snapshot())
+        if path == "/api/project-graph":
             return self._json(200, orch.graph.snapshot())
-        if self.path == "/api/recovery/ladder":
+        if path == "/api/recovery/ladder":
             return self._json(200, {"steps": orch.recovery.ladder()})
-        if self.path.startswith("/api/incidents"):
-            project = None
-            if "?project=" in self.path:
-                project = self.path.split("?project=", 1)[1].split("&", 1)[0]
+        if path == "/api/incidents":
+            project = (query.get("project") or [None])[0]
             return self._json(200, {"incidents": orch.memory.incidents(project, 50)})
         return self._json(404, {"error": "not found"})
 
@@ -120,6 +144,29 @@ class Handler(BaseHTTPRequestHandler):
                 activity["current_activity"] = "Error"
                 return self._json(500, {"error": str(exc)})
 
+        if self.path == "/api/projects/register":
+            try:
+                out = orch.register_project(
+                    name=str(data.get("name", "")).strip(),
+                    root=str(data.get("root", "")).strip(),
+                    privacy=str(data.get("privacy", "local_only")),
+                    allowed_actions=data.get("allowed_actions") or [],
+                    verification_checks=data.get("verification_checks") or [],
+                    metadata=data.get("metadata") or {},
+                )
+                return self._json(200, out)
+            except (ValueError, TypeError) as exc:
+                return self._json(400, {"error": str(exc)})
+
+        if self.path == "/api/projects/index":
+            project = str(data.get("project", "")).strip()
+            if not project:
+                return self._json(400, {"error": "project is required"})
+            try:
+                return self._json(200, orch.index_project(project))
+            except KeyError:
+                return self._json(404, {"error": "project not registered"})
+
         if self.path == "/api/investigate":
             symptom = str(data.get("symptom", "")).strip()
             if not symptom:
@@ -135,6 +182,25 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 mark("INVESTIGATION ERROR", str(exc)[:160])
                 return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/repair/shadow":
+            project = str(data.get("project", "")).strip()
+            symptom = str(data.get("symptom", "")).strip()
+            action = str(data.get("action", "")).strip()
+            if not project or not symptom or not action:
+                return self._json(400, {"error": "project, symptom and action are required"})
+            mark("SHADOW REPAIR", f"{project}: {symptom[:80]}")
+            try:
+                out = orch.run_shadow_repair(project, symptom, action, data.get("components") or [])
+                mark("SHADOW VERIFIED" if out["promotable"] else "SHADOW REJECTED", out["repair_id"])
+                activity["current_activity"] = "Idle"
+                return self._json(200, out)
+            except KeyError as exc:
+                return self._json(404, {"error": str(exc)})
+            except PermissionError as exc:
+                return self._json(403, {"error": str(exc)})
+            except RuntimeError as exc:
+                return self._json(409, {"error": str(exc)})
 
         if self.path == "/api/knowledge/ingest":
             project = str(data.get("project", "general"))
@@ -181,6 +247,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         pass
+
 
 if __name__ == "__main__":
     print(f"KRISHNA Core: http://127.0.0.1:{settings.port}/dashboard")
