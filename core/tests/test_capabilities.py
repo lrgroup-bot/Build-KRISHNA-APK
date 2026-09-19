@@ -17,6 +17,9 @@ from krishna_core.shadow_workspace import ShadowWorkspaceManager
 from krishna_core.repair_agent import RepairAgent
 from krishna_core.neural_action_graph import NeuralActionGraph
 from krishna_core.pc_observer import PCObserver
+from krishna_core.browser_operator import BrowserOperator
+from krishna_core.github_research import GitHubResearchAgent
+from krishna_core.goal_evaluator import GoalEvaluator
 
 
 class KrishnaCapabilityTests(unittest.TestCase):
@@ -190,6 +193,48 @@ class KrishnaCapabilityTests(unittest.TestCase):
         self.assertEqual("reason_about_command", routed["intent"]["name"])
         self.assertTrue(routed["intent"]["requires_reasoning"])
         self.assertEqual(1, graph.snapshot()["events_seen"])
+
+
+    def test_browser_operator_summarizes_frontend_errors(self):
+        findings = BrowserOperator.summarize_findings(
+            console_errors=["ReferenceError: x is not defined"],
+            page_errors=["Unhandled promise rejection"],
+            failed_requests=["GET /api/data :: net::ERR_FAILED"],
+            bad_responses=["500 http://localhost/api/data"],
+        )
+        self.assertEqual(4, len(findings))
+        self.assertTrue(any(x["kind"] == "console_error" for x in findings))
+        self.assertTrue(any(x["kind"] == "http_error" for x in findings))
+
+    def test_github_research_scores_license_activity_and_adoption(self):
+        repo = {
+            "full_name": "example/tool",
+            "html_url": "https://github.com/example/tool",
+            "description": "test",
+            "stargazers_count": 2000,
+            "language": "Python",
+            "license": {"spdx_id": "MIT"},
+            "archived": False,
+            "pushed_at": "2026-09-18T00:00:00Z",
+        }
+        candidate = GitHubResearchAgent.evaluate(repo)
+        self.assertGreater(candidate.score, 5)
+        self.assertEqual("MIT", candidate.license)
+        self.assertFalse(candidate.archived)
+
+    def test_goal_evaluator_requires_every_acceptance_check(self):
+        evaluator = GoalEvaluator()
+        result = evaluator.evaluate("Project works as required", [
+            {"name": "backend", "passed": True, "detail": "200 OK"},
+            {"name": "ui", "passed": False, "detail": "button broken"},
+        ])
+        self.assertFalse(result["complete"])
+        self.assertEqual("goal_not_yet_verified", result["conclusion"])
+        done = evaluator.evaluate("Project works as required", [
+            {"name": "backend", "passed": True, "detail": "200 OK"},
+            {"name": "ui", "passed": True, "detail": "workflow verified"},
+        ])
+        self.assertTrue(done["complete"])
 
 
 if __name__ == "__main__":
