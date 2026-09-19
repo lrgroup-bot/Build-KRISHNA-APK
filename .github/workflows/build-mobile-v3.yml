@@ -1,0 +1,115 @@
+name: Build KRISHNA v3 3D APK
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/krishna-v3-live-avatar
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/java/com/krishna/mobile
+          mkdir -p app/src/main/res/{values,drawable,xml,raw}
+          mkdir -p app/src/main/assets/three
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name='KrishnaV3'
+          include ':app'
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.7.3' apply false }
+          EOF
+
+          echo 'org.gradle.jvmargs=-Xmx2048m' > gradle.properties
+
+          cat > app/build.gradle <<'EOF'
+          plugins { id 'com.android.application' }
+          android {
+            namespace 'com.krishna.mobile'
+            compileSdk 35
+            defaultConfig {
+              applicationId 'com.krishna.mobile'
+              minSdk 26
+              targetSdk 35
+              versionCode 30
+              versionName '3.0.0'
+            }
+          }
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+            <string name="app_name">KRISHNA</string>
+            <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar"/>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/xml/network_security_config.xml <<'EOF'
+          <network-security-config>
+            <base-config cleartextTrafficPermitted="false">
+              <trust-anchors>
+                <certificates src="system"/>
+                <certificates src="user"/>
+                <certificates src="@raw/krishna_ca"/>
+              </trust-anchors>
+            </base-config>
+          </network-security-config>
+          EOF
+
+          cp app/src/main/res/raw/krishna-ca.cer app/src/main/res/raw/krishna_ca.cer
+          cp app/src/main/res/drawable/krishna_hud.png app/src/main/res/drawable/krishna_hud_v3.png
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <uses-permission android:name="android.permission.INTERNET"/>
+            <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+            <application
+              android:theme="@style/AppTheme"
+              android:label="KRISHNA"
+              android:icon="@drawable/krishna_hud_v3"
+              android:usesCleartextTraffic="false"
+              android:networkSecurityConfig="@xml/network_security_config">
+              <activity android:name=".MainActivity" android:exported="true">
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN"/>
+                  <category android:name="android.intent.category.LAUNCHER"/>
+                </intent-filter>
+              </activity>
+            </application>
+          </manifest>
+          EOF
+
+          cp mobile_v3/MainActivity.java app/src/main/java/com/krishna/mobile/MainActivity.java
+          cp mobile_v3/index.html app/src/main/assets/index.html
+
+          npm init -y >/dev/null 2>&1
+          npm install three@0.180.0 --no-save
+          cp node_modules/three/build/three.module.js app/src/main/assets/three/three.module.js
+          cp node_modules/three/examples/jsm/loaders/GLTFLoader.js app/src/main/assets/three/GLTFLoader.js
+          sed -i "s/from 'three'/from '.\/three.module.js'/" app/src/main/assets/three/GLTFLoader.js
+
+      - name: Build APK
+        run: gradle :app:assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KRISHNA-v3-Live-3D-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
