@@ -23,6 +23,7 @@ from krishna_core.goal_evaluator import GoalEvaluator
 from krishna_core.skill_runtime import SkillRegistry, parse_skill_markdown
 from krishna_core.content_guard import assess_untrusted_content
 from krishna_core.orchestrator import Orchestrator
+from krishna_core.task_ledger import TaskLedger
 
 
 class KrishnaCapabilityTests(unittest.TestCase):
@@ -330,6 +331,44 @@ class KrishnaCapabilityTests(unittest.TestCase):
         finally:
             orch.task_ledger.close()
             orch.memory.close()
+
+
+    def test_task_ledger_history_includes_completed_tasks(self):
+        with tempfile.TemporaryDirectory() as td:
+            ledger = TaskLedger(str(Path(td) / "tasks.db"))
+            try:
+                completed = ledger.create("KRISHNA", "read-only health check")
+                ledger.update(completed["task_id"], "completed", "report", {"evidence_count": 3})
+                running = ledger.create("KRISHNA", "another task")
+                ledger.update(running["task_id"], "running", "investigate")
+                history = ledger.list_tasks("KRISHNA")
+                self.assertEqual(2, len(history))
+                self.assertEqual("running", history[0]["status"])
+                self.assertEqual("completed", history[1]["status"])
+                self.assertEqual([running["task_id"]], [x["task_id"] for x in ledger.active()])
+            finally:
+                ledger.close()
+
+    def test_diagnostic_prompt_requires_evidence_grounding(self):
+        with tempfile.TemporaryDirectory() as td:
+            orch = Orchestrator()
+            try:
+                captured = {}
+                def route(prompt, privacy="local_only"):
+                    captured["prompt"] = prompt
+                    return {"provider": "test", "text": "0.50|configuration warning observed"}
+                orch.router.route = route
+                orch._ai_hypotheses(
+                    "health check",
+                    [Evidence("log", "tail", "Database initialized. Proxy not configured.", 1.0)],
+                    {"project": "KRISHNA", "privacy": "local_only"},
+                )
+                self.assertIn("warning is not an error", captured["prompt"])
+                self.assertIn("initialized", captured["prompt"])
+                self.assertIn("not configured", captured["prompt"])
+            finally:
+                orch.task_ledger.close()
+                orch.memory.close()
 
 
 if __name__ == "__main__":
