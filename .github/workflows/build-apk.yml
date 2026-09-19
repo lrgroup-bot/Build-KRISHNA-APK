@@ -101,6 +101,7 @@ jobs:
 
           cp mobile_v3/MainActivity.java app/src/main/java/com/krishna/mobile/MainActivity.java
           cp mobile_v3/index.html app/src/main/assets/index.html
+          base64 -d avatar/krishna_child_360.webp.b64 > app/src/main/assets/krishna_child_360.webp
 
           npm init -y >/dev/null 2>&1
           npm install three@0.180.0 --no-save
@@ -111,7 +112,7 @@ jobs:
       - name: Build APK
         run: gradle :app:assembleDebug
 
-      - name: Verify Live 3D assets
+      - name: Verify child KRISHNA 360 avatar and runtime
         shell: bash
         run: |
           set -euo pipefail
@@ -120,7 +121,10 @@ jobs:
           test -f app/src/main/assets/three/three.module.js
           test -f app/src/main/assets/three/GLTFLoader.js
           grep -q "avatarBase64" app/src/main/java/com/krishna/mobile/MainActivity.java
-          grep -q "GLTFLoader" app/src/main/assets/index.html
+          test -s app/src/main/assets/krishna_child_360.webp
+          grep -q "krishna_child_360.webp" app/src/main/assets/index.html
+          grep -q "SWIPE TO ROTATE" app/src/main/assets/index.html
+          grep -q "showView" app/src/main/assets/index.html
           grep -q "setMode" app/src/main/assets/index.html
           grep -q 'http://192.168.0.106:8766' app/src/main/java/com/krishna/mobile/MainActivity.java
           grep -q 'android:usesCleartextTraffic="true"' app/src/main/AndroidManifest.xml
