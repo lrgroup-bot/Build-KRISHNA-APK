@@ -372,5 +372,21 @@ class KrishnaCapabilityTests(unittest.TestCase):
                 orch.memory.close()
 
 
+    def test_specialist_selection_rejects_irrelevant_health_specialists(self):
+        from krishna_core.specialist_library import SpecialistLibrary, Specialist
+        with tempfile.TemporaryDirectory() as td:
+            lib = SpecialistLibrary(Path(td) / "state")
+            lib.items = {
+                "paid-media/auditor": Specialist("paid-media/auditor", "Paid Media Auditor", "paid-media", "Google Ads and Meta audit", "x"),
+                "engineering/debugger": Specialist("engineering/debugger", "Debugger", "engineering", "Debug software failures and reliability problems", "y"),
+                "testing/reality": Specialist("testing/reality", "Reality Checker", "testing", "Evidence based testing and production readiness", "z"),
+            }
+            selected = lib.select("Check this project's health and identify any real problems.", limit=4)
+            ids = {x["id"] for x in selected}
+            self.assertNotIn("paid-media/auditor", ids)
+            self.assertIn("engineering/debugger", ids)
+            self.assertIn("testing/reality", ids)
+
+
 if __name__ == "__main__":
     unittest.main()
