@@ -607,6 +607,52 @@ class KrishnaCapabilityTests(unittest.TestCase):
         self.assertIn('out["mode"] = "chat"',server)
 
 
+    def test_ai_hypotheses_reject_unsupported_success_language(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "project"; root.mkdir()
+            (root / "app.txt").write_text("present", encoding="utf-8")
+            orch = Orchestrator(db_path=str(Path(td) / "hypothesis.db"))
+            try:
+                orch.register_project("demo", str(root))
+                orch.router.route = lambda prompt, privacy="local_only": {
+                    "provider": "test",
+                    "text": (
+                        "0.90|Project is configured correctly and operational.\n"
+                        "0.85|The probe was successfully run multiple times.\n"
+                        "0.65|Check whether the observed root listing matches the expected project layout."
+                    ),
+                }
+                out = orch.investigate("Inspect project", "demo")
+                statements = [h["statement"] for h in out["hypotheses"]]
+                joined = " ".join(statements).lower()
+                self.assertNotIn("configured correctly", joined)
+                self.assertNotIn("successfully run", joined)
+                self.assertNotIn("operational", joined)
+                self.assertEqual(1, len(statements))
+                self.assertTrue(statements[0].lower().startswith("check:"))
+                self.assertLessEqual(out["hypotheses"][0]["confidence"], 0.70)
+                self.assertEqual("untested", out["hypotheses"][0]["status"])
+            finally:
+                orch.task_ledger.close(); orch.memory.close()
+
+    def test_ai_hypotheses_caps_confidence_and_marks_claim_possible(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "project"; root.mkdir()
+            orch = Orchestrator(db_path=str(Path(td) / "hypothesis-cap.db"))
+            try:
+                orch.register_project("demo", str(root))
+                orch.router.route = lambda prompt, privacy="local_only": {
+                    "provider": "test",
+                    "text": "0.99|A dependency mismatch may explain the observed symptom.",
+                }
+                out = orch.investigate("dependency symptom", "demo")
+                hypothesis = out["hypotheses"][0]
+                self.assertEqual(0.70, hypothesis["confidence"])
+                self.assertTrue(hypothesis["statement"].startswith("possible: "))
+                self.assertEqual("untested", hypothesis["status"])
+            finally:
+                orch.task_ledger.close(); orch.memory.close()
+
     def test_managed_health_report_fails_closed_on_specialist_fact_leakage(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td) / "project"; root.mkdir()
