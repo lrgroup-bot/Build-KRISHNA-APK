@@ -45,6 +45,12 @@ jobs:
           $size=(Get-Item "dist/KRISHNA.exe").Length
           if ($size -lt 1000000) { throw "KRISHNA.exe unexpectedly small" }
           Write-Host "KRISHNA.exe bytes: $size"
+          $commands = "/status`n/exit`n"
+          $commands | & .\dist\KRISHNA.exe *> krishna-console-smoke.txt
+          $output = Get-Content krishna-console-smoke.txt -Raw
+          Write-Host $output
+          if ($output -notmatch "Core connected") { throw "KRISHNA Core did not auto-start inside EXE" }
+          if ($output -notmatch '"core": "ONLINE"') { throw "KRISHNA /status did not report Core ONLINE" }
 
       - uses: actions/upload-artifact@v4
         with:
