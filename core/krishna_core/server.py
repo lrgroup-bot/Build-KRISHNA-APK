@@ -17,7 +17,12 @@ _pairing = DevicePairingStore(Path(settings.db_path).resolve().parent / ".krishn
 _sessions = RealtimeSessionStore(Path(settings.db_path).resolve().parent / ".krishna_state")
 _plugins = PluginRegistry(Path(settings.db_path).resolve().parent / ".krishna_state")
 _specialists = SpecialistLibrary(Path(settings.db_path).resolve().parent / ".krishna_state", Path(__file__).resolve().parents[2] / "external" / "agency-agents")
-try:\n    if _specialists.source_root.exists(): _specialists.index()\nexcept Exception:\n    pass\nstarted = time.time()
+try:
+    if _specialists.source_root.exists():
+        _specialists.index()
+except Exception:
+    pass
+started = time.time()
 activity = {"current_activity": "Idle", "updated": time.strftime("%Y-%m-%d %H:%M:%S"), "recent": []}
 _mobile_lock = threading.RLock()
 _mobile_link = {
