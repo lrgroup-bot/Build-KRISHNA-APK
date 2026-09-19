@@ -72,6 +72,9 @@ class SpecialistLibrary:
         stop={"this","that","with","from","only","real","project","use","appropriate","useful","modify","anything","report","actually","observed","identify","problems"}
         words-=stop
         diagnostic=any(p in text for p in ("health","problem","error","fail","debug","diagnos","inspect","check"))
+        generic_health = diagnostic and any(p in text for p in ("project health", "health check", "inspect")) and not any(
+            p in text for p in ("database", "accessibility", "service management", "sla", "cmdb", "post-training", "training")
+        )
         scored=[]
         for x in self.items.values():
             hay=(" "+x.name+" "+x.description+" "+x.division+" ").lower()
@@ -82,6 +85,19 @@ class SpecialistLibrary:
             if diagnostic and x.division=="engineering": score+=2
             if diagnostic and any(k in hay for k in ("debug","qa","reality","test","incident","devops","reliability","code reviewer")): score+=3
             if diagnostic and x.division in {"paid-media","finance","sales","marketing"}: score-=6
+            if generic_health:
+                # Generic software health checks should prefer evidence/reality/code
+                # specialists and avoid role/template specialists whose prompts can
+                # contaminate the factual report.
+                preferred = ("reality", "evidence", "code reviewer", "debug", "reliability", "qa", "test")
+                if any(k in hay for k in preferred):
+                    score += 6
+                if any(k in hay for k in (
+                    "executive summary", "it service manager", "service management",
+                    "accessibility", "database", "post-training", "stakeholder",
+                    "marketing", "legal", "paid media",
+                )):
+                    score -= 12
             if "code" in words and x.division=="engineering": score+=3
             if score>=4: scored.append((score,x))
         scored.sort(key=lambda q:(-q[0],q[1].division,q[1].name.lower()))
