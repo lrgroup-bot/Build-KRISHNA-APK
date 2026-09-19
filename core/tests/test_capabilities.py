@@ -439,10 +439,33 @@ class KrishnaCapabilityTests(unittest.TestCase):
                 self.assertEqual("promotion_ready", result["phase"])
                 self.assertTrue(result["detail"]["promotion_ready"])
                 self.assertFalse(result["detail"]["live_project_modified"])
+                self.assertTrue(result["detail"]["promotion"]["promotion_token"])
+                candidate=Path(result["detail"]["repair"]["candidate_root"])
+                self.assertTrue(candidate.exists())
+                self.assertEqual("fixed",(candidate/"app.txt").read_text(encoding="utf-8"))
                 self.assertEqual("broken", live.read_text(encoding="utf-8"))
             finally:
                 orch.task_ledger.close()
                 orch.memory.close()
+
+
+
+    def test_repair_agent_persists_only_verified_candidate(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td)/"project"; root.mkdir(); (root/"a.txt").write_text("old",encoding="utf-8")
+            orch=Orchestrator(db_path=str(Path(td)/"r.db"))
+            try:
+                orch.register_project("demo",str(root),allowed_actions=["patch"],verification_checks=["content"])
+                orch.register_action("demo","patch",lambda p:(Path(p["workspace"])/"a.txt").write_text("new",encoding="utf-8") or {},mutating=False)
+                orch.register_verification_check("demo","content",lambda workspace:((workspace/"a.txt").read_text(encoding="utf-8")=="new","verified"))
+                orch.router.route=lambda prompt,privacy="local_only":{"provider":"test","text":"0.5|observed"}
+                out=orch.run_shadow_repair("demo","repair","patch",[])
+                self.assertTrue(out["promotable"])
+                self.assertIsNotNone(out["candidate_root"])
+                self.assertTrue(Path(out["candidate_root"]).is_dir())
+                self.assertEqual("old",(root/"a.txt").read_text(encoding="utf-8"))
+            finally:
+                orch.task_ledger.close(); orch.memory.close()
 
 
     def test_promotion_manager_promotes_verified_candidate_with_backup(self):
