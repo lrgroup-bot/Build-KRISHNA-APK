@@ -1,5 +1,5 @@
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-import json, time
+import json, time, threading
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
@@ -11,6 +11,36 @@ from .pc_observer import PCObserver
 orch = Orchestrator()
 started = time.time()
 activity = {"current_activity": "Idle", "updated": time.strftime("%Y-%m-%d %H:%M:%S"), "recent": []}
+_mobile_lock = threading.RLock()
+_mobile_link = {
+    "device": None,
+    "last_seen": 0.0,
+    "last_path": None,
+    "requests": 0,
+}
+
+
+def touch_mobile(device, path):
+    if not device:
+        return
+    now = time.time()
+    with _mobile_lock:
+        _mobile_link["device"] = str(device)[:128]
+        _mobile_link["last_seen"] = now
+        _mobile_link["last_path"] = str(path)[:256]
+        _mobile_link["requests"] += 1
+
+
+def mobile_link_state():
+    now = time.time()
+    with _mobile_lock:
+        last_seen = float(_mobile_link["last_seen"] or 0.0)
+        age = None if not last_seen else max(0.0, now - last_seen)
+        return {
+            **_mobile_link,
+            "connected": bool(last_seen and age <= 20.0),
+            "age_seconds": None if age is None else round(age, 1),
+        }
 DASHBOARD = (Path(__file__).resolve().parents[1] / "dashboard.html")
 
 
@@ -81,6 +111,7 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(n) or b"{}")
 
     def do_GET(self):
+        touch_mobile(self.headers.get("X-Krishna-Device"), self.path)
         parsed = urlparse(self.path)
         path = parsed.path
         query = parse_qs(parsed.query)
@@ -94,6 +125,7 @@ class Handler(BaseHTTPRequestHandler):
                 "watcher": watcher.snapshot(),
                 "resources": orch.governor.snapshot(),
                 "pc_observer": pc_observer.snapshot(),
+                "mobile_connection": mobile_link_state(),
                 "uptime_seconds": int(time.time() - started),
             })
         if path == "/api/dashboard":
@@ -107,8 +139,11 @@ class Handler(BaseHTTPRequestHandler):
                 "current_activity": activity["current_activity"],
                 "updated": activity["updated"],
                 "recent": activity["recent"],
+                "mobile_connection": mobile_link_state(),
                 "uptime_seconds": int(time.time() - started),
             })
+        if path == "/api/mobile/connection":
+            return self._json(200, mobile_link_state())
         if path == "/api/capabilities":
             return self._json(200, {
                 "operating_loop": [
@@ -170,12 +205,15 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(404, {"error": "not found"})
 
     def do_POST(self):
+        touch_mobile(self.headers.get("X-Krishna-Device"), self.path)
         try:
             data = self._body()
         except Exception as exc:
             return self._json(400, {"error": f"invalid json: {exc}"})
 
         if self.path in ("/api/core/event", "/api/neural/event"):
+            if str(data.get("source", "")).lower() == "mobile":
+                touch_mobile(self.headers.get("X-Krishna-Device") or "android-primary", self.path)
             source = str(data.get("source", "unknown")).strip() or "unknown"
             kind = str(data.get("kind", "event")).strip() or "event"
             detail = str(data.get("detail", ""))
@@ -187,12 +225,15 @@ class Handler(BaseHTTPRequestHandler):
             ))
 
         if self.path in ("/api/mobile-log",):
+            touch_mobile(self.headers.get("X-Krishna-Device") or "android-primary", self.path)
             event = str(data.get("event", ""))
             return self._json(200, orch.handle_event(
                 "mobile", "mobile_log", event, severity="info", project="system",
             ))
 
         if self.path in ("/v1/chat", "/api/core/chat"):
+            if str(data.get("source", "")).lower() == "mobile":
+                touch_mobile(self.headers.get("X-Krishna-Device") or "android-primary", self.path)
             msg = data.get("message", "")
             mark("REQUEST RECEIVED", msg[:120])
             try:
