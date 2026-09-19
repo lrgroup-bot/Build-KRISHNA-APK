@@ -383,6 +383,35 @@ Evidence:
     def neural_state(self):
         return self.neural.snapshot()
 
+    @staticmethod
+    def _looks_like_work_request(message):
+        text=(message or "").lower()
+        work_words=("fix ","repair ","build ","create ","implement ","code ","test ","check project","inspect ","deploy ","install ","update project","complete project","debug ")
+        return any(word in text for word in work_words)
+
+    def handle_managed_request(self, message, project="general", source="pc", chat_id=None):
+        task=self.task_ledger.create(project,message)
+        task_id=task["task_id"]
+        specialists=[]
+        self.task_ledger.update(task_id,"running","plan",{"capability":"sudarshan"})
+        try:
+            # Sudarshan is an internal KRISHNA capability. This path plans and reasons;
+            # mutations still require registered project actions and verification.
+            prefix=("KRISHNA has internally invoked Sudarshan for managed work. "
+                    "Produce a concrete bounded plan using the registered project context. "
+                    "Separate observed evidence from proposed work. Never claim a mutation, test, "
+                    "installation or repair happened unless tool/action evidence proves it.\n\n")
+            out=self.handle(prefix+message,project,source,chat_id)
+            self.task_ledger.update(task_id,"waiting_approval","bounded_action",{
+                "capability":"sudarshan","response_task_id":out.get("task_id"),"specialists":specialists
+            })
+            out["managed_task_id"]=task_id
+            out["capability"]="sudarshan"
+            return out
+        except Exception as exc:
+            self.task_ledger.update(task_id,"failed","error",{"error":f"{type(exc).__name__}: {exc}"})
+            raise
+
     def handle(self, message, project="general", source="pc", chat_id=None):
         task_id = str(uuid.uuid4())
         self.memory.audit(task_id, "received", message)
