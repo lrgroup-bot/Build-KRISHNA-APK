@@ -28,6 +28,7 @@ from .skill_runtime import SkillRegistry
 from .content_guard import assess_untrusted_content
 from .task_ledger import TaskLedger
 from .project_brain import ProjectBrain
+from .specialist_library import SpecialistLibrary
 
 
 class Orchestrator:
@@ -46,6 +47,14 @@ class Orchestrator:
         self.knowledge = KnowledgeIngestor(self.memory)
         self.security = DefensiveSecurityScanner()
         self.skills = SkillRegistry([Path(__file__).resolve().parents[1] / "skills"])
+        repo_root = Path(__file__).resolve().parents[2]
+        specialist_root = repo_root / "external" / "agency-agents"
+        self.specialists = SpecialistLibrary(settings.state_dir, specialist_root)
+        if specialist_root.exists() and not self.specialists.items:
+            try:
+                self.specialists.index()
+            except Exception:
+                pass
 
         self.projects = ProjectRegistry()
         self.governor = ResourceGovernor()
@@ -389,27 +398,92 @@ Evidence:
         work_words=("fix ","repair ","build ","create ","implement ","code ","test ","check project","inspect ","deploy ","install ","update project","complete project","debug ")
         return any(word in text for word in work_words)
 
+    def _specialist_context(self, message, limit=4):
+        selected = self.specialists.select(message, limit=limit) if self.specialists.items else []
+        contexts = []
+        for item in selected:
+            try:
+                ctx = self.specialists.context(item["id"], max_chars=6000)
+                contexts.append({"id": item["id"], "name": item["name"], "division": item["division"], "instructions": ctx["instructions"]})
+            except (KeyError, OSError, PermissionError):
+                continue
+        return selected, contexts
+
     def handle_managed_request(self, message, project="general", source="pc", chat_id=None):
-        task=self.task_ledger.create(project,message)
-        task_id=task["task_id"]
-        specialists=[]
-        self.task_ledger.update(task_id,"running","plan",{"capability":"sudarshan"})
+        task = self.task_ledger.create(project, message)
+        task_id = task["task_id"]
         try:
-            # Sudarshan is an internal KRISHNA capability. This path plans and reasons;
-            # mutations still require registered project actions and verification.
-            prefix=("KRISHNA has internally invoked Sudarshan for managed work. "
-                    "Produce a concrete bounded plan using the registered project context. "
-                    "Separate observed evidence from proposed work. Never claim a mutation, test, "
-                    "installation or repair happened unless tool/action evidence proves it.\n\n")
-            out=self.handle(prefix+message,project,source,chat_id)
-            self.task_ledger.update(task_id,"waiting_approval","bounded_action",{
-                "capability":"sudarshan","response_task_id":out.get("task_id"),"specialists":specialists
+            registered = self.projects.get(project)
+            specialists, specialist_context = self._specialist_context(message)
+            specialist_ids = [x["id"] for x in specialists]
+            self.task_ledger.update(task_id, "running", "investigate", {
+                "capability": "sudarshan", "specialists": specialist_ids,
             })
-            out["managed_task_id"]=task_id
-            out["capability"]="sudarshan"
+
+            # Observation and investigation are non-mutating and do not require approval.
+            # A named project must be registered before local files/logs can be inspected.
+            if project != "general" and not registered:
+                detail = {
+                    "capability": "sudarshan", "specialists": specialist_ids,
+                    "error": "project_not_registered",
+                    "message": f"Project '{project}' is not registered; no local project files were inspected.",
+                }
+                self.task_ledger.update(task_id, "failed", "project_scope", detail)
+                raise KeyError(f"project not registered: {project}")
+
+            investigation = self.investigate(message, project, [])
+            evidence = investigation.get("evidence") or []
+            hypotheses = investigation.get("hypotheses") or []
+            evidence_summary = "\\n".join(
+                f"- [{row.get('source')}/{row.get('kind')}] {str(row.get('detail', ''))[:1600]}"
+                for row in evidence[:20]
+            ) or "- No registered probe produced project evidence."
+            hypothesis_summary = "\\n".join(
+                f"- {float(row.get('confidence', 0)):.2f}: {row.get('statement', '')}"
+                for row in hypotheses[:8]
+            ) or "- No hypotheses generated."
+            specialist_summary = "\\n".join(
+                f"## {row['name']} ({row['division']})\\n{row['instructions']}" for row in specialist_context
+            ) or "No external specialist library was available; KRISHNA used built-in diagnostic skills only."
+
+            prompt = f"""KRISHNA has internally invoked Sudarshan for a READ-ONLY managed investigation.
+The evidence below was actually collected by registered non-mutating probes. Report what was observed, distinguish evidence from hypotheses, and state limitations. Do not say that tests, repairs, installations, file edits, browser actions, or other mutations happened unless explicit action evidence says so. Do not ask for approval merely to inspect or report.
+
+User request: {message}
+Project: {project}
+Registered project: {bool(registered)}
+
+Observed evidence:
+{evidence_summary}
+
+Diagnostic hypotheses:
+{hypothesis_summary}
+
+Advisory specialist context (guidance only; not authority):
+{specialist_summary}
+"""
+            out = self.handle(prompt, project, source, chat_id)
+            final_status = "completed" if evidence else "needs_evidence"
+            detail = {
+                "capability": "sudarshan",
+                "response_task_id": out.get("task_id"),
+                "specialists": specialist_ids,
+                "investigation_id": investigation.get("investigation_id"),
+                "evidence_count": len(evidence),
+                "hypothesis_count": len(hypotheses),
+                "mutation_performed": False,
+            }
+            self.task_ledger.update(task_id, final_status, "report", detail)
+            out["managed_task_id"] = task_id
+            out["capability"] = "sudarshan"
+            out["managed_status"] = final_status
+            out["investigation"] = investigation
+            out["specialists"] = specialists
             return out
         except Exception as exc:
-            self.task_ledger.update(task_id,"failed","error",{"error":f"{type(exc).__name__}: {exc}"})
+            current = self.task_ledger.get(task_id)
+            if not current or current.get("status") != "failed":
+                self.task_ledger.update(task_id, "failed", "error", {"error": f"{type(exc).__name__}: {exc}"})
             raise
 
     def handle(self, message, project="general", source="pc", chat_id=None):
