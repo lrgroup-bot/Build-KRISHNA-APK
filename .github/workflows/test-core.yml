@@ -3,10 +3,12 @@ on:
   push:
     paths:
       - 'core/**'
+      - 'scripts/**'
       - '.github/workflows/test-core.yml'
   pull_request:
     paths:
       - 'core/**'
+      - 'scripts/**'
       - '.github/workflows/test-core.yml'
 
 jobs:
@@ -24,3 +26,15 @@ jobs:
         run: python -m compileall -q krishna_core
       - name: Run capability tests
         run: python -m unittest discover -s tests -v
+      - name: Validate PowerShell bootstrap syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem ../scripts/*.ps1 | ForEach-Object {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "$($_.Extent.File):$($_.Extent.StartLineNumber) $($_.Message)" }
+              throw "PowerShell syntax validation failed for $($_.FullName)"
+            }
+          }

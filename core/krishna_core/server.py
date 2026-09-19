@@ -74,8 +74,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/capabilities":
             return self._json(200, {
                 "operating_loop": [
-                    "observe", "understand", "investigate", "research",
-                    "plan", "act", "test", "verify", "learn"
+                    "observe", "understand", "investigate", "research", "plan",
+                    "change_gate", "shadow_execute", "test", "verify", "learn"
                 ],
                 "capabilities": [
                     "project_graph",
@@ -89,10 +89,22 @@ class Handler(BaseHTTPRequestHandler):
                     "watcher_transitions",
                     "local_cloud_model_routing",
                     "vision_local_enrolled_identity",
+                    "mythos_engineering_stack",
+                    "code_intelligence_adapters",
+                    "hard_change_gate",
+                    "shadow_workspaces",
+                    "linear_engineering_worker",
+                    "computer_use_adapter",
+                    "extension_bus",
                 ],
                 "mutating_actions_enabled": settings.allow_actions,
                 "vision": orch.vision.status(),
+                "engineering": orch.engineering.status(),
             })
+        if self.path == "/api/engineering/status":
+            return self._json(200, orch.engineering.status())
+        if self.path == "/api/engineering/operator/status":
+            return self._json(200, orch.engineering.operator.status())
         if self.path == "/api/vision/status":
             return self._json(200, orch.vision.status())
         if self.path == "/api/project-graph":
@@ -125,6 +137,54 @@ class Handler(BaseHTTPRequestHandler):
                 mark("ERROR", str(exc)[:160])
                 activity["current_activity"] = "Error"
                 return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/engineering/recon":
+            project = str(data.get("project", "general"))
+            project_path = str(data.get("project_path", "")).strip()
+            symptom = str(data.get("symptom", "")).strip()
+            if not project_path or not symptom:
+                return self._json(400, {"error": "project_path and symptom are required"})
+            mark("ENGINEERING RECON", symptom[:120])
+            try:
+                out = orch.engineering_recon(project, project_path, symptom, data.get("components") or [])
+                activity["current_activity"] = "Idle"
+                return self._json(200, out)
+            except Exception as exc:
+                mark("ENGINEERING RECON ERROR", str(exc)[:160])
+                return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/engineering/change-gate":
+            path = str(data.get("path", "")).strip()
+            if not path:
+                return self._json(400, {"error": "path is required"})
+            try:
+                out = orch.engineering.assess_change(
+                    path=path,
+                    expected_hash=data.get("expected_hash"),
+                    caller_count=int(data.get("caller_count", 0)),
+                    changed_lines=int(data.get("changed_lines", 0)),
+                    tests_present=bool(data.get("tests_present", False)),
+                    external_risk=data.get("external_risk"),
+                    explicit_confirmation=bool(data.get("explicit_confirmation", False)),
+                )
+                return self._json(200, out)
+            except Exception as exc:
+                return self._json(400, {"error": str(exc)})
+
+        if self.path == "/api/engineering/shadow-plan":
+            project = str(data.get("project", "general"))
+            source = str(data.get("source", "")).strip()
+            actions = data.get("actions") or []
+            if not source or not isinstance(actions, list):
+                return self._json(400, {"error": "source and actions are required"})
+            try:
+                out = orch.engineering.run_shadow_plan(project, source, actions)
+                return self._json(200, out)
+            except Exception as exc:
+                return self._json(400, {"error": str(exc)})
+
+        if self.path == "/api/engineering/operator/diagnostic":
+            return self._json(200, orch.engineering.operator.diagnostic())
 
         if self.path == "/api/vision/enroll":
             mark("VISION ENROLL", str(data.get("name", ""))[:80])

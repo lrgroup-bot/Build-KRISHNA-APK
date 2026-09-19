@@ -9,6 +9,7 @@ from .recovery import RecoveryEngine
 from .knowledge import KnowledgeIngestor
 from .security import DefensiveSecurityScanner
 from .identity import VisionIdentityService
+from .mythos_stack import MythosEngineeringStack
 
 class Orchestrator:
     def __init__(self):
@@ -27,6 +28,11 @@ class Orchestrator:
             settings.compreface_api_key,
             known_threshold=settings.face_known_threshold,
             possible_threshold=settings.face_possible_threshold,
+        )
+        self.engineering = MythosEngineeringStack(
+            self.memory,
+            self.investigator,
+            self.verifier,
         )
         self._register_builtin_probes()
 
@@ -111,6 +117,12 @@ Evidence:
         self.memory.audit(report["investigation_id"], "investigated", project)
         return report
 
+    def engineering_recon(self, project, project_path, symptom, components=None):
+        base = self.engineering.recon(project, project_path, symptom, components)
+        investigation = self.investigate(symptom, project, components)
+        base["investigation"] = investigation
+        return base
+
     def ingest_knowledge(self, project, source, text, metadata=None):
         result = self.knowledge.ingest(project, source, text, metadata)
         self.memory.audit("knowledge_ingest", "complete", f"{project}:{source}:{result}")
@@ -122,9 +134,10 @@ Evidence:
         context = self.memory.recall(project, 12)
         incidents = self.memory.incidents(project, 5)
         prompt = f"""You are KRISHNA Core, a persistent autonomous software intelligence.
-Operating loop: Observe -> Understand -> Investigate -> Research -> Plan -> Act -> Test -> Verify -> Learn.
+Operating loop: Observe -> Understand -> Investigate -> Research -> Plan -> Change Gate -> Shadow Execute -> Test -> Verify -> Learn.
 Be concise and truthful. Never claim an action completed unless verification evidence exists.
 Never execute arbitrary shell commands from natural language. Mutating actions must use registered workers/policies.
+High-risk code changes require change-gate approval and shadow verification before deployment.
 
 Project: {project}
 Recent memory: {context}
