@@ -133,6 +133,10 @@ class Handler(BaseHTTPRequestHandler):
                     "recovery_ladder",
                     "defensive_security_scan",
                     "watcher_transitions",
+                    "neural_action_graph",
+                    "pc_resource_observer",
+                    "registered_project_change_observer",
+                    "mobile_event_bridge",
                 ],
                 "mutating_actions_enabled": settings.allow_actions,
             })
