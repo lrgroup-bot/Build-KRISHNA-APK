@@ -306,7 +306,7 @@ class KrishnaCapabilityTests(unittest.TestCase):
             root = Path(td) / "project"
             root.mkdir()
             (root / "requirements.txt").write_text("example==1.0\n", encoding="utf-8")
-            orch = Orchestrator()
+            orch = Orchestrator(db_path=str(Path(td) / "managed.db"))
             try:
                 orch.register_project("demo", str(root))
                 orch.router.route = lambda prompt, privacy="local_only": {
@@ -324,13 +324,14 @@ class KrishnaCapabilityTests(unittest.TestCase):
                 orch.memory.close()
 
     def test_managed_unknown_named_project_is_not_inspected(self):
-        orch = Orchestrator()
-        try:
-            with self.assertRaises(KeyError):
-                orch.handle_managed_request("Check project health.", "not-registered")
-        finally:
-            orch.task_ledger.close()
-            orch.memory.close()
+        with tempfile.TemporaryDirectory() as td:
+            orch = Orchestrator(db_path=str(Path(td) / "unknown.db"))
+            try:
+                with self.assertRaises(KeyError):
+                    orch.handle_managed_request("Check project health.", "not-registered")
+            finally:
+                orch.task_ledger.close()
+                orch.memory.close()
 
 
     def test_task_ledger_history_includes_completed_tasks(self):
@@ -351,7 +352,7 @@ class KrishnaCapabilityTests(unittest.TestCase):
 
     def test_diagnostic_prompt_requires_evidence_grounding(self):
         with tempfile.TemporaryDirectory() as td:
-            orch = Orchestrator()
+            orch = Orchestrator(db_path=str(Path(td) / "diagnostic.db"))
             try:
                 captured = {}
                 def route(prompt, privacy="local_only"):
@@ -371,6 +372,26 @@ class KrishnaCapabilityTests(unittest.TestCase):
                 orch.task_ledger.close()
                 orch.memory.close()
 
+
+
+    def test_orchestrator_db_path_isolates_project_registry(self):
+        with tempfile.TemporaryDirectory() as td:
+            first_db = Path(td) / "first.db"
+            second_db = Path(td) / "second.db"
+            root = Path(td) / "project"
+            root.mkdir()
+            first = Orchestrator(db_path=str(first_db))
+            second = Orchestrator(db_path=str(second_db))
+            try:
+                first.register_project("isolated-demo", str(root))
+                self.assertIsNotNone(first.projects.get("isolated-demo"))
+                self.assertIsNone(second.projects.get("isolated-demo"))
+                self.assertEqual([], second.memory.projects())
+            finally:
+                first.task_ledger.close()
+                first.memory.close()
+                second.task_ledger.close()
+                second.memory.close()
 
     def test_specialist_selection_rejects_irrelevant_health_specialists(self):
         from krishna_core.specialist_library import SpecialistLibrary, Specialist
