@@ -52,6 +52,16 @@ $AgentPython = Join-Path $AgentVenv "Scripts\python.exe"
 Run-Checked -Exe $AgentPython -Arguments @("-m","pip","install","--upgrade","pip")
 Run-Checked -Exe $AgentPython -Arguments @("-m","pip","install","--upgrade","mini-swe-agent","swe-rex")
 
+Write-Step "Hardening NTFS permissions for codebase-memory"
+try {
+  if (Test-Path $CbmRoot) {
+    & icacls $CbmRoot /inheritance:r | Out-Null
+    & icacls $CbmRoot /grant:r "$env:USERNAME:(OI)(CI)F" "SYSTEM:(OI)(CI)F" "Administrators:(OI)(CI)F" | Out-Null
+  }
+} catch {
+  Write-Warn "Could not fully harden ACLs automatically: $($_.Exception.Message)"
+}
+
 Write-Step "Installing codebase-memory-mcp into $CbmRoot"
 $cbmInstaller = Join-Path $env:TEMP "krishna-codebase-memory-install.ps1"
 Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/DeusData/codebase-memory-mcp/main/install.ps1" -OutFile $cbmInstaller
