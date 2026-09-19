@@ -1,0 +1,51 @@
+name: Build KRISHNA Windows Console
+
+on:
+  push:
+    branches:
+      - feature/autonomous-browser-research
+      - main
+    paths:
+      - 'core/**'
+      - '.github/workflows/build-console.yml'
+  workflow_dispatch:
+
+jobs:
+  build-console:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install console dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller playwright
+
+      - name: Build KRISHNA.exe
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean --onefile `
+            --name KRISHNA `
+            --paths core `
+            --collect-submodules krishna_core `
+            --collect-all playwright `
+            --add-data "core/dashboard.html;." `
+            core/krishna_console.py
+
+      - name: Smoke test executable
+        shell: pwsh
+        run: |
+          if (!(Test-Path "dist/KRISHNA.exe")) { throw "KRISHNA.exe missing" }
+          $size=(Get-Item "dist/KRISHNA.exe").Length
+          if ($size -lt 1000000) { throw "KRISHNA.exe unexpectedly small" }
+          Write-Host "KRISHNA.exe bytes: $size"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KRISHNA-Windows-Console
+          path: dist/KRISHNA.exe
