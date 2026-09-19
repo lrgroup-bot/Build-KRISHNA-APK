@@ -642,6 +642,7 @@ STRICT OUTPUT CONTRACT:
                        if evidence else "- No evidence-backed issue can be stated.")
                     + "\n\nLimitations:\n- This fallback reports collected probe evidence only; advisory specialist content and unverified hypotheses are excluded."
                 )
+                result["text"] = model_text
                 result["grounding_fallback"] = True
                 result["unsupported_claim_terms"] = unsupported
             else:
