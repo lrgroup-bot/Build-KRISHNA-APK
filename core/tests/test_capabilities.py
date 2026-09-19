@@ -526,6 +526,49 @@ class KrishnaCapabilityTests(unittest.TestCase):
         self.assertIn('out["mode"] = "chat"',server)
 
 
+    def test_managed_health_report_fails_closed_on_specialist_fact_leakage(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "project"; root.mkdir()
+            (root / "app.txt").write_text("healthy", encoding="utf-8")
+            orch = Orchestrator(db_path=str(Path(td) / "grounding.db"))
+            try:
+                orch.register_project("demo", str(root))
+                calls = {"n": 0}
+                def route(prompt, privacy="local_only"):
+                    calls["n"] += 1
+                    if "root-cause hypotheses" in prompt:
+                        return {"provider": "test", "text": "0.50|project files were observed"}
+                    return {"provider": "test", "text": "Observed evidence: CMDB and SLA are healthy.\\nPotential issues: none.\\nLimitations: none."}
+                orch.router.route = route
+                out = orch.handle_managed_request("Inspect project health. Do not modify anything.", "demo")
+                self.assertTrue(out["grounding_fallback"])
+                self.assertIn("cmdb", out["unsupported_claim_terms"])
+                self.assertIn("sla", out["unsupported_claim_terms"])
+                self.assertNotIn("CMDB and SLA are healthy", out["text"])
+                self.assertIn("collected probe evidence only", out["text"])
+                task = orch.task_ledger.get(out["managed_task_id"])
+                self.assertFalse(task["detail"]["mutation_performed"])
+            finally:
+                orch.task_ledger.close(); orch.memory.close()
+
+    def test_generic_health_routing_excludes_service_role_specialists(self):
+        from krishna_core.specialist_library import SpecialistLibrary, Specialist
+        with tempfile.TemporaryDirectory() as td:
+            lib = SpecialistLibrary(Path(td) / "state")
+            lib.items = {
+                "engineering/service": Specialist("engineering/service", "IT Service Manager", "engineering", "ITIL SLA CMDB stakeholder service management", "a"),
+                "support/summary": Specialist("support/summary", "Executive Summary Generator", "support", "C-suite executive summary", "b"),
+                "testing/reality": Specialist("testing/reality", "Reality Checker", "testing", "Evidence based testing and production readiness", "c"),
+                "testing/evidence": Specialist("testing/evidence", "Evidence Collector", "testing", "Collect evidence for software health and failures", "d"),
+                "engineering/reviewer": Specialist("engineering/reviewer", "Code Reviewer", "engineering", "Review code correctness reliability and failures", "e"),
+            }
+            ids = {x["id"] for x in lib.select("Inspect KRISHNA project health using only observed evidence.", limit=4)}
+            self.assertIn("testing/reality", ids)
+            self.assertIn("testing/evidence", ids)
+            self.assertIn("engineering/reviewer", ids)
+            self.assertNotIn("engineering/service", ids)
+            self.assertNotIn("support/summary", ids)
+
     def test_specialist_selection_rejects_irrelevant_health_specialists(self):
         from krishna_core.specialist_library import SpecialistLibrary, Specialist
         with tempfile.TemporaryDirectory() as td:
