@@ -32,9 +32,10 @@ from .specialist_library import SpecialistLibrary
 
 
 class Orchestrator:
-    def __init__(self):
-        self.memory = MemoryStore()
-        self.task_ledger = TaskLedger(settings.db_path)
+    def __init__(self, db_path=None):
+        self.db_path = str(db_path or settings.db_path)
+        self.memory = MemoryStore(self.db_path)
+        self.task_ledger = TaskLedger(self.db_path)
         self.project_brain = ProjectBrain(self.memory)
         self.router = ModelRouter()
         self.graph = ProjectGraph()
@@ -49,7 +50,7 @@ class Orchestrator:
         self.skills = SkillRegistry([Path(__file__).resolve().parents[1] / "skills"])
         repo_root = Path(__file__).resolve().parents[2]
         specialist_root = repo_root / "external" / "agency-agents"
-        specialist_state = Path(settings.db_path).resolve().parent / ".krishna_state"
+        specialist_state = Path(self.db_path).resolve().parent / ".krishna_state"
         self.specialists = SpecialistLibrary(specialist_state, specialist_root)
         if specialist_root.exists() and not self.specialists.items:
             try:
