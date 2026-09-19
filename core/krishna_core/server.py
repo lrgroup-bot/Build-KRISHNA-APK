@@ -10,12 +10,14 @@ from .pc_observer import PCObserver
 from .device_pairing import DevicePairingStore
 from .realtime_session import RealtimeSessionStore
 from .plugin_runtime import PluginRegistry
+from .specialist_library import SpecialistLibrary
 
 orch = Orchestrator()
 _pairing = DevicePairingStore(Path(settings.db_path).resolve().parent / ".krishna_state")
 _sessions = RealtimeSessionStore(Path(settings.db_path).resolve().parent / ".krishna_state")
 _plugins = PluginRegistry(Path(settings.db_path).resolve().parent / ".krishna_state")
-started = time.time()
+_specialists = SpecialistLibrary(Path(settings.db_path).resolve().parent / ".krishna_state", Path(__file__).resolve().parents[2] / "external" / "agency-agents")
+try:\n    if _specialists.source_root.exists(): _specialists.index()\nexcept Exception:\n    pass\nstarted = time.time()
 activity = {"current_activity": "Idle", "updated": time.strftime("%Y-%m-%d %H:%M:%S"), "recent": []}
 _mobile_lock = threading.RLock()
 _mobile_link = {
@@ -241,6 +243,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"projects": orch.projects.list()})
         if path == "/api/plugins":
             return self._json(200, {"plugins": _plugins.list()})
+        if path == "/api/specialists":
+            return self._json(200, _specialists.status())
         if path == "/api/skills":
             project = (query.get("project") or [None])[0]
             return self._json(200, orch.skill_status(project))
@@ -450,6 +454,26 @@ class Handler(BaseHTTPRequestHandler):
                 mark("ERROR", str(exc)[:160])
                 activity["current_activity"] = "Error"
                 return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/specialists/index":
+            try:
+                return self._json(200, _specialists.index(data.get("source_root") or None))
+            except ValueError as exc:
+                return self._json(400, {"error": str(exc)})
+
+        if self.path == "/api/specialists/select":
+            task = str(data.get("task", "")).strip()
+            if not task:
+                return self._json(400, {"error": "task is required"})
+            return self._json(200, {"selected": _specialists.select(task, int(data.get("limit", 5)))})
+
+        if self.path == "/api/specialists/context":
+            try:
+                return self._json(200, _specialists.context(str(data.get("id", ""))))
+            except KeyError:
+                return self._json(404, {"error": "specialist not found"})
+            except PermissionError as exc:
+                return self._json(403, {"error": str(exc)})
 
         if self.path == "/api/plugins/add":
             try:
