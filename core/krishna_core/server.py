@@ -186,6 +186,9 @@ class Handler(BaseHTTPRequestHandler):
                     "verification_review",
                     "resource_governor",
                     "privacy_aware_model_routing",
+                    "chromium_ui_inspection",
+                    "github_repository_research",
+                    "goal_completion_evaluation",
                     "recovery_ladder",
                     "defensive_security_scan",
                     "watcher_transitions",
@@ -340,6 +343,45 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(403, {"error": str(exc)})
             except RuntimeError as exc:
                 return self._json(409, {"error": str(exc)})
+
+        if self.path == "/api/browser/inspect":
+            project = str(data.get("project", "general"))
+            url = str(data.get("url", "")).strip()
+            if not url:
+                return self._json(400, {"error": "url is required"})
+            try:
+                out = orch.inspect_ui(
+                    project,
+                    url,
+                    actions=data.get("actions") or [],
+                    screenshot_path=data.get("screenshot_path"),
+                )
+                return self._json(200, out)
+            except (ValueError, RuntimeError) as exc:
+                return self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/research/github":
+            project = str(data.get("project", "general"))
+            query = str(data.get("query", "")).strip()
+            if not query:
+                return self._json(400, {"error": "query is required"})
+            try:
+                out = orch.research_github(project, query, int(data.get("limit", 10)))
+                return self._json(200, out)
+            except (ValueError, RuntimeError) as exc:
+                return self._json(400, {"error": str(exc)})
+            except Exception as exc:
+                return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/goal/evaluate":
+            project = str(data.get("project", "general"))
+            goal = str(data.get("goal", "")).strip()
+            checks = data.get("checks") or []
+            if not goal:
+                return self._json(400, {"error": "goal is required"})
+            return self._json(200, orch.evaluate_goal(project, goal, checks))
 
         if self.path == "/api/knowledge/ingest":
             project = str(data.get("project", "general"))
