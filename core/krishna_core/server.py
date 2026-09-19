@@ -426,7 +426,11 @@ class Handler(BaseHTTPRequestHandler):
                 # KRISHNA is always the primary intelligence. Sudarshan is an internal
                 # managed-work capability selected automatically for explicit work modes.
                 if mode == "chat":
-                    out = orch.handle(msg, project, data.get("source", "pc"), data.get("chat_id"))
+                    if orch._looks_like_work_request(msg):
+                        out = orch.handle_managed_request(msg, project, data.get("source", "pc"), data.get("chat_id"))
+                        mode = "karma"
+                    else:
+                        out = orch.handle(msg, project, data.get("source", "pc"), data.get("chat_id"))
                 else:
                     prefix = (
                         "Internal Sudarshan/Karma work capability requested. Build a bounded plan, identify evidence and verification criteria, "
