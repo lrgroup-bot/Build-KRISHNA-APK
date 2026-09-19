@@ -409,6 +409,7 @@ the evidence explicitly records that exact event. Absence of an error is not evi
 Do not convert warnings, informational messages, or missing observations into proof of health,
 success, correctness, failure, or absence of problems.
 Do not convert successful initialization messages into failures.
+Treat terms such as "initialized" and "not configured" according to their observed context; neither phrase alone proves a failure.
 Do not infer repetition, chronology, causation, or component presence from a root listing.
 Return one line as: confidence|possible: <statement>
 Confidence must be 0.00-0.70. These remain untested until a verification check proves them.
