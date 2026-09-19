@@ -9,10 +9,12 @@ from .watcher import Watcher
 from .pc_observer import PCObserver
 from .device_pairing import DevicePairingStore
 from .realtime_session import RealtimeSessionStore
+from .plugin_runtime import PluginRegistry
 
 orch = Orchestrator()
 _pairing = DevicePairingStore(Path(settings.db_path).resolve().parent / ".krishna_state")
 _sessions = RealtimeSessionStore(Path(settings.db_path).resolve().parent / ".krishna_state")
+_plugins = PluginRegistry(Path(settings.db_path).resolve().parent / ".krishna_state")
 started = time.time()
 activity = {"current_activity": "Idle", "updated": time.strftime("%Y-%m-%d %H:%M:%S"), "recent": []}
 _mobile_lock = threading.RLock()
@@ -237,6 +239,8 @@ class Handler(BaseHTTPRequestHandler):
             })
         if path == "/api/projects":
             return self._json(200, {"projects": orch.projects.list()})
+        if path == "/api/plugins":
+            return self._json(200, {"plugins": _plugins.list()})
         if path == "/api/skills":
             project = (query.get("project") or [None])[0]
             return self._json(200, orch.skill_status(project))
@@ -429,6 +433,24 @@ class Handler(BaseHTTPRequestHandler):
                 mark("ERROR", str(exc)[:160])
                 activity["current_activity"] = "Error"
                 return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/plugins/add":
+            try:
+                return self._json(200, _plugins.add(data))
+            except ValueError as exc:
+                return self._json(400, {"error": str(exc)})
+
+        if self.path == "/api/plugins/enable":
+            try:
+                return self._json(200, _plugins.set_enabled(str(data.get("id", "")).strip(), bool(data.get("enabled", True))))
+            except KeyError:
+                return self._json(404, {"error": "plugin not found"})
+
+        if self.path == "/api/plugins/remove":
+            try:
+                return self._json(200, {"removed": _plugins.remove(str(data.get("id", "")).strip())})
+            except PermissionError as exc:
+                return self._json(403, {"error": str(exc)})
 
         if self.path == "/api/chats/create":
             project = str(data.get("project", "general")).strip() or "general"
