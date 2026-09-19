@@ -44,6 +44,7 @@ header{position:relative;text-align:center;padding:16px 12px 7px}.brand{letter-s
     <div class="row"><button style="width:100%" onclick="closeWorkspace()">Done</button></div>
   </div>
 </div>
+<script src="realtime-client.js"></script>
 <script>
 
 function ws(){try{return JSON.parse(Krishna.workspace())}catch(e){return {project:'general',chat_id:''}}}
@@ -99,5 +100,9 @@ window.send=()=>{const i=document.getElementById('msg'),q=i.value.trim();if(!q)r
 window.listen=()=>{if(!Krishna.voiceEnrolled()){document.getElementById('reply').textContent='Speak naturally for a few seconds to register the local owner voice profile.';setTimeout(()=>{const d=JSON.parse(Krishna.enrollVoice());document.getElementById('reply').textContent=d.error||'Voice profile registered locally. Tap the microphone again.'},100);return}if(!('webkitSpeechRecognition'in window)){document.getElementById('reply').textContent='Speech recognition unavailable; type your request.';return}const r=new webkitSpeechRecognition();r.lang='or-IN';r.interimResults=true;r.onstart=()=>setMode('CHAT','LISTENING');r.onresult=e=>{let t='';for(let k=e.resultIndex;k<e.results.length;k++)t+=e.results[k][0].transcript;document.getElementById('reply').textContent=t;if(e.results[e.results.length-1].isFinal){document.getElementById('msg').value=t.replace(/^krishna[ ,]*/i,'');send()}};r.onerror=e=>document.getElementById('reply').textContent='Voice: '+e.error;r.start()}
 function speak(t){try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang=/[\u0B00-\u0B7F]/.test(t)?'or-IN':'en-IN';speechSynthesis.speak(u)}catch(e){}}
 function poll(){try{const link=JSON.parse(Krishna.connection());if(link.error||!link.connected)throw new Error(link.error||'Backend link not confirmed');const d=JSON.parse(Krishna.state());if(d.error)throw new Error(d.error);setMode(d.operator?.avatar_state||'FLUTE',d.operator?.current?.task||'Radhe Radhe. I am ready.');document.getElementById('state').className='state good'}catch(e){document.getElementById('state').textContent='PC OFFLINE';document.getElementById('state').className='state bad'}}
-updateWorkspaceLabel();showView(0);startAuto();poll();setInterval(poll,5000);window.onerror=(m,s,l)=>{try{Krishna.log('JS '+m+' '+s+':'+l)}catch(e){}};
+updateWorkspaceLabel();showView(0);startAuto();poll();setInterval(poll,5000);
+const realtime=new KrishnaRealtime(Krishna);
+realtime.onEvent=e=>{if(e.type==='task.completed'){const p=e.payload||{};document.getElementById('reply').textContent=p.summary||'KRISHNA completed the task';}};
+realtime.onState=s=>{if(s==='reconnecting')document.getElementById('state').textContent='RECONNECTING';};
+realtime.start();window.onerror=(m,s,l)=>{try{Krishna.log('JS '+m+' '+s+':'+l)}catch(e){}};
 </script></body></html>

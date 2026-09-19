@@ -7,8 +7,12 @@ from .config import settings
 from .orchestrator import Orchestrator
 from .watcher import Watcher
 from .pc_observer import PCObserver
+from .device_pairing import DevicePairingStore
+from .realtime_session import RealtimeSessionStore
 
 orch = Orchestrator()
+_pairing = DevicePairingStore(Path(settings.db_path).resolve().parent / ".krishna_state")
+_sessions = RealtimeSessionStore(Path(settings.db_path).resolve().parent / ".krishna_state")
 started = time.time()
 activity = {"current_activity": "Idle", "updated": time.strftime("%Y-%m-%d %H:%M:%S"), "recent": []}
 _mobile_lock = threading.RLock()
@@ -133,6 +137,12 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", "0"))
         return json.loads(self.rfile.read(n) or b"{}")
 
+    def _device_auth(self):
+        device = self.headers.get("X-Krishna-Device", "").strip()
+        auth = self.headers.get("Authorization", "")
+        token = auth[7:].strip() if auth.startswith("Device ") else ""
+        return device, token
+
     def do_GET(self):
         touch_mobile(self.headers.get("X-Krishna-Device"), self.path)
         parsed = urlparse(self.path)
@@ -172,6 +182,12 @@ class Handler(BaseHTTPRequestHandler):
             })
         if path == "/api/mobile/connection":
             return self._json(200, mobile_link_state())
+        if path == "/api/mobile/resume":
+            device, token = self._device_auth()
+            if not _pairing.verify(device, token):
+                return self._json(401, {"error": "pairing required"})
+            seq = int((query.get("after") or [0])[0])
+            return self._json(200, {"ok": True, "events": _sessions.after(device, seq)})
         if path == "/api/capabilities":
             return self._json(200, {
                 "operating_loop": [
@@ -262,6 +278,20 @@ class Handler(BaseHTTPRequestHandler):
             data = self._body()
         except Exception as exc:
             return self._json(400, {"error": f"invalid json: {exc}"})
+
+        if self.path == "/api/mobile/pair/request":
+            device = str(data.get("device_id", "")).strip()
+            if not device:
+                return self._json(400, {"error": "device_id required"})
+            return self._json(200, _pairing.request(device, str(data.get("name", "KRISHNA Mobile"))[:128]))
+
+        if self.path == "/api/mobile/pair/approve":
+            if self.client_address[0] not in ("127.0.0.1", "::1"):
+                return self._json(403, {"error": "approval must be performed on KRISHNA PC"})
+            try:
+                return self._json(200, _pairing.approve(str(data.get("request_id", ""))))
+            except PermissionError as exc:
+                return self._json(400, {"error": str(exc)})
 
         if self.path in ("/api/core/event", "/api/neural/event"):
             if str(data.get("source", "")).lower() == "mobile":
@@ -379,6 +409,15 @@ class Handler(BaseHTTPRequestHandler):
                     project=data.get("project", "general"),
                     payload={"task_id": out.get("task_id")},
                 )
+                if str(data.get("source", "")).lower() == "mobile":
+                    device, token = self._device_auth()
+                    if _pairing.verify(device, token):
+                        _sessions.publish(device, "task.completed", {
+                            "project": data.get("project", "general"),
+                            "chat_id": out.get("chat_id") or data.get("chat_id"),
+                            "task_id": out.get("task_id"),
+                            "summary": (out.get("reply") or out.get("text") or "KRISHNA completed the task")[:240],
+                        })
                 return self._json(200, out)
             except Exception as exc:
                 mark("ERROR", str(exc)[:160])

@@ -57,8 +57,8 @@ jobs:
               applicationId 'com.krishna.mobile'
               minSdk 26
               targetSdk 35
-              versionCode 33
-              versionName '3.3.0'
+              versionCode 34
+              versionName '3.4.0'
             }
           }
           EOF
@@ -90,6 +90,7 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
             <uses-permission android:name="android.permission.INTERNET"/>
             <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+            <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
             <application
               android:theme="@style/AppTheme"
               android:label="KRISHNA"
@@ -108,6 +109,7 @@ jobs:
 
           cp mobile_v3/MainActivity.java app/src/main/java/com/krishna/mobile/MainActivity.java
           cp mobile_v3/index.html app/src/main/assets/index.html
+          cp mobile_v3/realtime-client.js app/src/main/assets/realtime-client.js
           base64 -d avatar/krishna_child_360.webp.b64 > app/src/main/assets/krishna_child_360.webp
 
           npm init -y >/dev/null 2>&1
