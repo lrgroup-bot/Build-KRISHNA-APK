@@ -71,7 +71,47 @@ public class MainActivity extends Activity {
       return call("/api/core/event","{\"source\":\"mobile\",\"kind\":"+JSONObject.quote(kind)+",\"detail\":"+JSONObject.quote(detail)+",\"project\":\"system\"}");
     }
     @JavascriptInterface public String state(){ return call("/api/core/state",null); }
-    @JavascriptInterface public String chat(String m){ return call(CORE,"{\"message\":"+JSONObject.quote(m)+",\"project\":\"general\",\"source\":\"mobile\"}"); }
+    @JavascriptInterface public String projects(){ return call("/api/projects",null); }
+    @JavascriptInterface public String chats(String project){
+      return call("/api/chats?project="+urlEncode(project),null);
+    }
+    @JavascriptInterface public String newChat(String project,String title){
+      return call("/api/chats/create","{\"project\":"+JSONObject.quote(project)+",\"title\":"+JSONObject.quote(title)+"}");
+    }
+    @JavascriptInterface public void setWorkspace(String project,String chatId){
+      getSharedPreferences("k",0).edit()
+        .putString("active_project",project==null?"general":project)
+        .putString("active_chat",chatId==null?"":chatId).apply();
+    }
+    @JavascriptInterface public String workspace(){
+      try{
+        JSONObject j=new JSONObject();
+        j.put("project",getSharedPreferences("k",0).getString("active_project","general"));
+        j.put("chat_id",getSharedPreferences("k",0).getString("active_chat",""));
+        return j.toString();
+      }catch(Exception e){ return "{\"project\":\"general\",\"chat_id\":\"\"}"; }
+    }
+    @JavascriptInterface public String chat(String m){
+      String project=getSharedPreferences("k",0).getString("active_project","general");
+      String chatId=getSharedPreferences("k",0).getString("active_chat","");
+      String body="{\"message\":"+JSONObject.quote(m)+",\"project\":"+JSONObject.quote(project)+
+        ",\"chat_id\":"+(chatId.isEmpty()?"null":JSONObject.quote(chatId))+",\"source\":\"mobile\"}";
+      return call(CORE,body);
+    }
+    @JavascriptInterface public String control(String action,String payloadJson){
+      try{
+        JSONObject body=new JSONObject();
+        body.put("action",action);
+        body.put("project",getSharedPreferences("k",0).getString("active_project","general"));
+        body.put("chat_id",getSharedPreferences("k",0).getString("active_chat",""));
+        if(payloadJson!=null && !payloadJson.trim().isEmpty()) body.put("payload",new JSONObject(payloadJson));
+        else body.put("payload",new JSONObject());
+        return call("/api/mobile/control",body.toString());
+      }catch(Exception e){ return "{\"error\":"+JSONObject.quote(String.valueOf(e.getMessage()))+"}"; }
+    }
+    String urlEncode(String value){
+      try{return URLEncoder.encode(value==null?"":value,"UTF-8");}catch(Exception e){return "";}
+    }
     @JavascriptInterface public String avatarBase64(){
       byte[] b=callBytes("/api/avatar");
       return b==null?"":Base64.encodeToString(b,Base64.NO_WRAP);
