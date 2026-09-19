@@ -29,6 +29,7 @@ from .content_guard import assess_untrusted_content
 from .task_ledger import TaskLedger
 from .project_brain import ProjectBrain
 from .specialist_library import SpecialistLibrary
+from .promotion_manager import PromotionManager
 
 
 class Orchestrator:
@@ -63,6 +64,8 @@ class Orchestrator:
         self.actions = ActionRegistry()
         self.indexer = RepositoryIndexer()
         self.shadow = ShadowWorkspaceManager()
+        self.promotions = PromotionManager(Path(self.db_path).resolve().parent / "backups" / "promotions")
+        self._promotion_candidates = {}
         self.reviewer = VerificationReviewer()
         self.neural = NeuralActionGraph()
         self.browser = BrowserOperator()
@@ -184,6 +187,41 @@ class Orchestrator:
                     "live_project_modified": False,
                 })
             raise
+
+
+    def prepare_promotion(self, project, candidate_root, task_id=None):
+        policy=self.projects.get(project)
+        if not policy: raise KeyError(project)
+        candidate=Path(candidate_root).resolve()
+        if not candidate.is_dir(): raise ValueError("candidate_root must be a directory")
+        delta=self.promotions.diff(policy.root,candidate)
+        token=str(uuid.uuid4())
+        self._promotion_candidates[token]={"project":project,"candidate_root":str(candidate),"task_id":task_id,"diff":delta}
+        self.memory.audit(token,"promotion_prepared",f"{project}:{delta['file_count']}")
+        return {"promotion_token":token,"project":project,"diff":delta,"approved":False,"live_project_modified":False}
+
+    def promote_candidate(self, token, approved=False):
+        item=self._promotion_candidates.get(token)
+        if not item: raise KeyError(token)
+        if not settings.allow_actions: raise PermissionError("KRISHNA_ALLOW_ACTIONS is disabled")
+        if not approved: raise PermissionError("explicit promotion approval required")
+        project=item["project"]; policy=self.projects.get(project)
+        if not policy: raise KeyError(project)
+        def verify(root):
+            checks=[]
+            for name in policy.verification_checks:
+                fn=self._verification_checks.get((project,name))
+                if fn: checks.append((name,lambda fn=fn,root=root:fn(root)))
+            return self.verifier.run(checks)
+        result=self.promotions.promote(project,policy.root,item["candidate_root"],verify)
+        self.memory.audit(token,result["status"],project)
+        if item.get("task_id"):
+            phase="complete" if result.get("promoted") else "rollback"
+            status="completed" if result.get("promoted") else "rejected"
+            self.task_ledger.update(item["task_id"],status,phase,{"promotion":result,"live_project_modified":bool(result.get("promoted"))})
+        if result.get("promoted") or result.get("rolled_back"): self._promotion_candidates.pop(token,None)
+        return result
+
 
     def register_project(self, name, root, privacy="local_only",
                          allowed_actions=None, verification_checks=None, metadata=None):
