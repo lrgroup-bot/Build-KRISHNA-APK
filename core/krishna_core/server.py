@@ -207,11 +207,17 @@ class Handler(BaseHTTPRequestHandler):
                     "mobile_pc_remote_control",
                     "persistent_project_chats",
                     "windows_conversation_console",
+                    "on_demand_skill_runtime",
+                    "untrusted_content_boundary",
+                    "specialist_permission_manifests",
                 ],
                 "mutating_actions_enabled": settings.allow_actions,
             })
         if path == "/api/projects":
             return self._json(200, {"projects": orch.projects.list()})
+        if path == "/api/skills":
+            project = (query.get("project") or [None])[0]
+            return self._json(200, orch.skill_status(project))
         if path == "/api/actions":
             project = (query.get("project") or [None])[0]
             return self._json(200, {"actions": orch.actions.list(project)})
@@ -344,6 +350,8 @@ class Handler(BaseHTTPRequestHandler):
                             "mobile_event_bridge","persistent_project_chats",
                             "windows_conversation_console","child_krishna_360_avatar",
                             "mobile_pc_remote_control",
+                            "on_demand_skill_runtime","untrusted_content_boundary",
+                            "specialist_permission_manifests",
                         ]
                     })
             except KeyError:
