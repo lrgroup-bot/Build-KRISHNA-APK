@@ -24,11 +24,15 @@ from .github_research import GitHubResearchAgent
 from .goal_evaluator import GoalEvaluator
 from .skill_runtime import SkillRegistry
 from .content_guard import assess_untrusted_content
+from .task_ledger import TaskLedger
+from .project_brain import ProjectBrain
 
 
 class Orchestrator:
     def __init__(self):
         self.memory = MemoryStore()
+        self.task_ledger = TaskLedger(settings.db_path)
+        self.project_brain = ProjectBrain(self.memory)
         self.router = ModelRouter()
         self.graph = ProjectGraph()
         self.evidence = EvidenceEngine()
@@ -77,6 +81,24 @@ class Orchestrator:
                 })
             except Exception:
                 continue
+
+    def run_managed_goal(self, project, goal, action_name=None, components=None):
+        task = self.task_ledger.create(project, goal)
+        task_id = task["task_id"]
+        try:
+            self.task_ledger.update(task_id, "running", "investigate")
+            investigation = self.investigate(goal, project, components or [])
+            if not action_name:
+                return self.task_ledger.update(task_id, "waiting_approval", "repair", {"investigation": investigation})
+            self.task_ledger.update(task_id, "running", "shadow_repair", {"action": action_name})
+            result = self.run_shadow_repair(project, goal, action_name, components or [])
+            if result.get("promotable"):
+                self.project_brain.learn_verified(project, goal, result)
+                return self.task_ledger.update(task_id, "verified", "complete", {"repair": result})
+            return self.task_ledger.update(task_id, "rejected", "verification", {"repair": result})
+        except Exception as exc:
+            self.task_ledger.update(task_id, "failed", "error", {"error": f"{type(exc).__name__}: {exc}"})
+            raise
 
     def register_project(self, name, root, privacy="local_only",
                          allowed_actions=None, verification_checks=None, metadata=None):
