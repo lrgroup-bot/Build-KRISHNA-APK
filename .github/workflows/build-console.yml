@@ -36,6 +36,7 @@ jobs:
             --collect-submodules krishna_core `
             --collect-all playwright `
             --add-data "core/dashboard.html;." `
+            --add-data "avatar/krishna_child_360.webp.b64;avatar" `
             core/krishna_console.py
 
       - name: Smoke test executable
