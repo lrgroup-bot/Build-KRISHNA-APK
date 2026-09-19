@@ -1,54 +1,129 @@
 name: Build KRISHNA APK
-on: [push, workflow_dispatch]
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v5
-        with: {distribution: temurin, java-version: '17'}
+        with:
+          distribution: temurin
+          java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-        with: {gradle-version: '8.9'}
-      - name: Build
+        with:
+          gradle-version: '8.9'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Prepare KRISHNA Live 3D Android project
+        shell: bash
         run: |
-          mkdir -p app/src/main/java/com/krishna/mobile app/src/main/res/{values,drawable,xml,raw} app/src/main/assets
+          set -euo pipefail
+          mkdir -p app/src/main/java/com/krishna/mobile
+          mkdir -p app/src/main/res/{values,drawable,xml,raw}
+          mkdir -p app/src/main/assets/three
+
           cat > settings.gradle <<'EOF'
-          pluginManagement { repositories { google();mavenCentral();gradlePluginPortal() } }
-          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google();mavenCentral() } }
-          rootProject.name='Krishna';include ':app'
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
+          dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+          rootProject.name='Krishna'
+          include ':app'
           EOF
-          echo "plugins { id 'com.android.application' version '8.7.3' apply false }" > build.gradle
+
+          cat > build.gradle <<'EOF'
+          plugins { id 'com.android.application' version '8.7.3' apply false }
+          EOF
+
           echo 'org.gradle.jvmargs=-Xmx2048m' > gradle.properties
+
           cat > app/build.gradle <<'EOF'
           plugins { id 'com.android.application' }
-          android { namespace 'com.krishna.mobile'; compileSdk 35
-          defaultConfig { applicationId 'com.krishna.mobile'; minSdk 26; targetSdk 35; versionCode 24; versionName '2.4.0' } }
+          android {
+            namespace 'com.krishna.mobile'
+            compileSdk 35
+            defaultConfig {
+              applicationId 'com.krishna.mobile'
+              minSdk 26
+              targetSdk 35
+              versionCode 31
+              versionName '3.1.0'
+            }
+          }
           EOF
-          echo '<resources><string name="app_name">KRISHNA</string><style name="AppTheme" parent="android:style/Theme.Material.NoActionBar"/></resources>' > app/src/main/res/values/styles.xml
-          echo '<shape xmlns:android="http://schemas.android.com/apk/res/android"><solid android:color="#06182A"/><corners android:radius="24dp"/><stroke android:width="2dp" android:color="#00C8FF"/></shape>' > app/src/main/res/drawable/field.xml
-          echo '<network-security-config><base-config><trust-anchors><certificates src="system"/><certificates src="user"/><certificates src="@raw/krishna_ca"/></trust-anchors></base-config></network-security-config>' > app/src/main/res/xml/network_security_config.xml
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+            <string name="app_name">KRISHNA</string>
+            <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar"/>
+          </resources>
+          EOF
+
+          cat > app/src/main/res/xml/network_security_config.xml <<'EOF'
+          <network-security-config>
+            <base-config cleartextTrafficPermitted="false">
+              <trust-anchors>
+                <certificates src="system"/>
+                <certificates src="user"/>
+                <certificates src="@raw/krishna_ca"/>
+              </trust-anchors>
+            </base-config>
+          </network-security-config>
+          EOF
+
           cp app/src/main/res/raw/krishna-ca.cer app/src/main/res/raw/krishna_ca.cer
-          rm app/src/main/res/raw/krishna-ca.cer
+          rm -f app/src/main/res/raw/krishna-ca.cer
+          cp app/src/main/res/drawable/krishna_hud.png app/src/main/res/drawable/krishna_hud_v3.png
+
           cat > app/src/main/AndroidManifest.xml <<'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><uses-permission android:name="android.permission.RECORD_AUDIO"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/><application android:theme="@style/AppTheme" android:label="KRISHNA" android:icon="@drawable/krishna_hud" android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml/network_security_config"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+            <uses-permission android:name="android.permission.INTERNET"/>
+            <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+            <application
+              android:theme="@style/AppTheme"
+              android:label="KRISHNA"
+              android:icon="@drawable/krishna_hud_v3"
+              android:usesCleartextTraffic="false"
+              android:networkSecurityConfig="@xml/network_security_config">
+              <activity android:name=".MainActivity" android:exported="true">
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN"/>
+                  <category android:name="android.intent.category.LAUNCHER"/>
+                </intent-filter>
+              </activity>
+            </application>
+          </manifest>
           EOF
-          cat > app/src/main/java/com/krishna/mobile/MainActivity.java <<'EOF'
-          package com.krishna.mobile;import android.app.*;import android.os.*;import android.content.*;import android.content.pm.PackageManager;import android.webkit.*;import java.net.*;import java.io.*;import javax.net.ssl.*;import org.json.*;import android.media.*;import java.security.*;public class MainActivity extends Activity{static final int VOICE_SAMPLES=3; static final String SPEAKER_ENGINE="LOCAL_VOICE_PROFILE_V2"; static final String CORE_ARCH="KRISHNA_GATEWAY_V2";void startVoice(){}public void onCreate(Bundle b){super.onCreate(b);if(Build.VERSION.SDK_INT>=23&&checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO},41);}WebView w=new WebView(this);w.getSettings().setJavaScriptEnabled(true);w.getSettings().setDomStorageEnabled(true);w.setWebChromeClient(new WebChromeClient(){@Override public void onPermissionRequest(PermissionRequest request){runOnUiThread(()->{if(Build.VERSION.SDK_INT>=23&&checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)request.grant(request.getResources());else request.deny();});}});w.addJavascriptInterface(new Bridge(),"Krishna");setContentView(w);w.loadUrl("file:///android_asset/index.html");}public void onRequestPermissionsResult(int r,String[]p,int[]g){super.onRequestPermissionsResult(r,p,g);if(r==41&&g.length>0&&g[0]==PackageManager.PERMISSION_GRANTED){}}public class Bridge{final String CORE="/api/core/chat";Bridge(){ensureCredential();}@JavascriptInterface public boolean voiceEnrolled(){return getSharedPreferences("k",0).getBoolean("voice_enrolled",false);}@JavascriptInterface public String enrollVoice(){try{String fp=VoicePrint.capture(MainActivity.this,3200);getSharedPreferences("k",0).edit().putString("voiceprint",fp).putString("speaker_engine",SPEAKER_ENGINE).putBoolean("voice_enrolled",true).apply();return "{\"ok\":true}";}catch(Exception e){return "{\"error\":"+JSONObject.quote(String.valueOf(e.getMessage()))+"}";}}String token(){return getSharedPreferences("k",0).getString("device_credential","");}@JavascriptInterface public void pair(String ignored){ensureCredential();}void ensureCredential(){if(token().isEmpty()){String id=java.util.UUID.randomUUID().toString()+"-"+java.util.UUID.randomUUID().toString();getSharedPreferences("k",0).edit().putString("device_credential",id).apply();}}@JavascriptInterface public String status(){return call("/api/status",null);}@JavascriptInterface public void log(String e){call("/api/mobile-log","{\"event\":"+JSONObject.quote(e)+"}");}@JavascriptInterface public String chat(String m,boolean cloud){return call("/api/chat","{\"message\":"+JSONObject.quote(m)+",\"provider\":"+JSONObject.quote(cloud?"freellmapi":"local")+"}");}@JavascriptInterface public String chatAuto(String m){String r=call(CORE,"{\"message\":"+JSONObject.quote(m)+",\"project\":\"general\"}");try{JSONObject j=new JSONObject(r);if(!j.has("error")){String t=j.optString("text",j.optString("reply",""));if(!t.isEmpty()){j.put("reply",t);return j.toString();}}}catch(Exception ignored){}r=call("/api/chat","{\"message\":"+JSONObject.quote(m)+",\"provider\":\"local\"}");try{JSONObject j=new JSONObject(r);if(!j.has("error")&&j.optString("reply","").trim().length()>0)return r;}catch(Exception ignored){}return call("/api/chat","{\"message\":"+JSONObject.quote(m)+",\"provider\":\"freellmapi\"}");}String call(String path,String body){try{HttpsURLConnection c=(HttpsURLConnection)new URL("https://192.168.0.106:8765"+path).openConnection();c.setConnectTimeout(3500);c.setReadTimeout(90000);c.setRequestProperty("Authorization","Device "+token());c.setRequestProperty("X-Krishna-Device","android-primary");c.setRequestProperty("Origin","https://192.168.0.106:8765");c.setRequestProperty("Accept","application/json");if(body!=null){c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");c.getOutputStream().write(body.getBytes("UTF-8"));}InputStream in=c.getResponseCode()<400?c.getInputStream():c.getErrorStream();ByteArrayOutputStream o=new ByteArrayOutputStream();byte[]b=new byte[1024];for(int n;(n=in.read(b))>0;)o.write(b,0,n);return o.toString("UTF-8");}catch(Exception e){try{return "{\"error\":"+JSONObject.quote(e.getClass().getSimpleName()+": "+String.valueOf(e.getMessage()))+"}";}catch(Exception ignored){return "{\"error\":\"Connection failed\"}";}}}}}
-          class VoicePrint{static String capture(Context c,int ms)throws Exception{int rate=16000,bs=AudioRecord.getMinBufferSize(rate,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);AudioRecord a=new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,rate,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(bs,4096));short[]b=new short[1024];MessageDigest d=MessageDigest.getInstance("SHA-256");long end=System.currentTimeMillis()+ms;a.startRecording();while(System.currentTimeMillis()<end){int n=a.read(b,0,b.length);if(n>0){long energy=0,z=0;for(int i=1;i<n;i++){energy+=Math.abs(b[i]);if((b[i]>=0)!=(b[i-1]>=0))z++;}String feat=(energy/Math.max(1,n)/128)+":"+(z/4)+";";d.update(feat.getBytes("UTF-8"));}}a.stop();a.release();StringBuilder x=new StringBuilder();for(byte q:d.digest())x.append(String.format("%02x",q));return x.toString();}static boolean verify(Context c,String enrolled){try{String now=capture(c,1400);if(enrolled==null||enrolled.length()!=now.length())return false;int same=0;for(int i=0;i<now.length();i++)if(now.charAt(i)==enrolled.charAt(i))same++;return same>=24;}catch(Exception e){return false;}}}
-          EOF
-          cp app/src/main/res/drawable/krishna_hud.png app/src/main/assets/krishna_hud.png
-          cat > app/src/main/assets/index.html <<'EOF'
-          <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><style>
-          *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden}body{background:radial-gradient(circle at 50% 42%,#07344b 0,#031521 34%,#01070c 72%);color:#e8fbff;font-family:Arial,sans-serif}.grid{position:fixed;inset:0;background-image:linear-gradient(#00d8ff0c 1px,transparent 1px),linear-gradient(90deg,#00d8ff0c 1px,transparent 1px);background-size:34px 34px;mask-image:linear-gradient(to bottom,transparent,#000 30%,#000 70%,transparent)}.app{position:relative;height:100%;display:flex;flex-direction:column;padding:22px 18px 16px}.head{text-align:center}.brand{font-size:22px;font-weight:700;letter-spacing:7px;color:#8ff2ff;text-shadow:0 0 18px #00cfff}.state{margin-top:8px;font-size:10px;letter-spacing:3px;color:#6e99a8}.live{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0}.orb{position:relative;width:min(64vw,260px);aspect-ratio:1;border-radius:50%;display:grid;place-items:center}.halo,.halo2{position:absolute;border-radius:50%;border:1px solid #38eaff;box-shadow:0 0 24px #00bde9,inset 0 0 18px #007ba1}.halo{inset:5%;animation:pulse 2.2s ease-in-out infinite}.halo2{inset:16%;opacity:.65;animation:pulse 2.2s .5s ease-in-out infinite}.core{width:46%;aspect-ratio:1;border-radius:50%;background:url('krishna_hud.png') center/cover;box-shadow:0 0 35px #00dcff,0 0 90px #008bc5;animation:breathe 2.2s ease-in-out infinite}.wave{height:58px;display:flex;align-items:center;gap:5px;margin-top:18px}.wave i{display:block;width:3px;height:12px;border-radius:5px;background:#63efff;box-shadow:0 0 10px #00d8ff;animation:wave 1.1s ease-in-out infinite}.wave i:nth-child(2){animation-delay:.12s}.wave i:nth-child(3){animation-delay:.24s}.wave i:nth-child(4){animation-delay:.36s}.wave i:nth-child(5){animation-delay:.48s}.prompt{font-size:13px;letter-spacing:2px;color:#a8dce5;margin-top:4px}.transcript{width:100%;max-height:21vh;overflow:auto;text-align:center;margin-top:14px;padding:0 12px;font-size:15px;line-height:1.45;color:#eaffff}.bottom{width:100%}.composer{display:flex;gap:9px;padding:8px;border:1px solid #1bbdd6;border-radius:20px;background:#031824e8;box-shadow:0 0 20px #00698566}.composer input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:white;font-size:15px;padding:11px}.mic,.send{width:48px;height:48px;border-radius:50%;border:1px solid #43eaff;background:#062b3b;color:#9af7ff;font-size:20px}.send{font-size:18px}.pair{display:none;margin-bottom:10px;padding:12px;border:1px solid #20cce5;border-radius:14px;background:#041a27}.pair.show{display:block}.pair input{width:100%;padding:11px;border-radius:9px;border:1px solid #27d9ef;background:#02111a;color:white}.pair button{width:100%;margin-top:8px;padding:11px;border:0;border-radius:9px;background:#41eaff;color:#001218;font-weight:bold}.error{color:#ff7189}@keyframes pulse{50%{transform:scale(1.08);opacity:.45}}@keyframes breathe{50%{transform:scale(1.06);filter:brightness(1.25)}}@keyframes wave{50%{height:45px}}body.thinking .halo{animation-duration:.75s}body.thinking .halo2{animation-duration:.55s}body.speaking .core{box-shadow:0 0 45px #71f6ff,0 0 120px #00bde9}
-          </style></head><body><div class="grid"></div><main class="app"><header class="head"><div class="brand">KRISHNA</div><div id="state" class="state">READY</div></header><section class="live"><div class="orb" onclick="listen()"><div class="halo"></div><div class="halo2"></div><div class="core"></div></div><div class="wave"><i></i><i></i><i></i><i></i><i></i></div><div id="prompt" class="prompt">କହନ୍ତୁ — KRISHNA ଶୁଣୁଛି</div><div id="reply" class="transcript">କୃଷ୍ଣ ବୋଲି କହନ୍ତୁ, କିମ୍ବା ମାଇକ୍‌କୁ ଟ୍ୟାପ୍ କରନ୍ତୁ।</div></section><footer class="bottom"><div id="pairBox" class="pair"><input id="pair" type="password" autocomplete="off" placeholder="Pairing code"><button onclick="connect()">PAIR WITH PC</button></div><div class="composer"><input id="msg" placeholder="Talk to KRISHNA…" onkeydown="if(event.key==='Enter')send()"><button class="mic" onclick="listen()">🎙</button><button class="send" onclick="send()">➤</button></div></footer></main><script>
-          const state=document.getElementById('state'),reply=document.getElementById('reply'),promptEl=document.getElementById('prompt'),pairBox=document.getElementById('pairBox');function mode(n,t){document.body.className=n||'';state.textContent=t||'READY'}function connect(){try{Krishna.pair(pair.value);let d=JSON.parse(Krishna.status());if(d.error)throw new Error(d.error);pairBox.classList.remove('show');mode('','PC CONNECTED');reply.textContent='Connected. I am ready.'}catch(e){pairBox.classList.add('show');reply.innerHTML='<span class="error">'+e.message+'</span>'}}function boot(){try{if(!Krishna.voiceEnrolled()){promptEl.textContent='VOICE ENROLLMENT REQUIRED';reply.textContent='Tap the microphone once and speak naturally to register your owner voice. Device connection is automatic.';}let d=JSON.parse(Krishna.status());if(d.error){pairBox.classList.remove('show');state.textContent='CONNECTING';reply.textContent='KRISHNA is connecting with this device credential automatically.'}else{pairBox.classList.remove('show');state.textContent='PC CONNECTED'}}catch(e){pairBox.classList.add('show')}}function sendText(q){if(!q)return;mode('thinking','THINKING');promptEl.textContent='KRISHNA IS WORKING';reply.textContent='Listening to your request…';setTimeout(()=>{try{let d=JSON.parse(Krishna.chatAuto(q));if(d.error){mode('','CONNECTION CHECK');reply.innerHTML='<span class="error">'+d.error+'</span>';return}mode('speaking','RESPONDING');reply.textContent=d.reply||'Done.';speak(reply.textContent)}catch(e){mode('','ERROR');reply.textContent=e.message}},30)}function send(){let q=msg.value.trim();msg.value='';sendText(q)}function listen(){if(!Krishna.voiceEnrolled()){mode('','ENROLLING YOUR VOICE');reply.textContent='Speak naturally for a few seconds…';setTimeout(()=>{let e=JSON.parse(Krishna.enrollVoice());if(e.error){mode('','ENROLLMENT ERROR');reply.textContent=e.error}else{mode('','VOICE REGISTERED');reply.textContent='Owner voice profile stored locally. Tap the microphone again to talk to KRISHNA.'}},100);return}if(!('webkitSpeechRecognition'in window)){mode('','VOICE UNAVAILABLE');reply.textContent='Android speech recognition is unavailable. You can still type to KRISHNA.';return}let r=new webkitSpeechRecognition();r.lang='or-IN';r.interimResults=true;r.continuous=false;mode('','LISTENING');promptEl.textContent='I AM LISTENING';r.onresult=e=>{let t='';for(let i=e.resultIndex;i<e.results.length;i++)t+=e.results[i][0].transcript;reply.textContent=t;if(e.results[e.results.length-1].isFinal)sendText(t.replace(/^krishna[ ,]*/i,''))};r.onerror=e=>{mode('','VOICE CHECK');reply.textContent='Voice recognition: '+e.error};r.onend=()=>{if(state.textContent==='LISTENING')mode('','READY')};r.start()}function speak(t){try{speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(t);u.lang=/[\u0B00-\u0B7F]/.test(t)?'or-IN':'en-IN';u.onend=()=>{mode('','READY');promptEl.textContent='SAY “KRISHNA” OR TAP TO TALK'};speechSynthesis.speak(u)}catch(e){mode('','READY')}}window.onerror=(m,s,l)=>{try{Krishna.log('JS '+m+' @ '+s+':'+l)}catch(e){}};boot();
-          </script></body></html>
-          EOF
-          cat > app/src/main/java/com/krishna/mobile/VoiceService.java <<'EOF'
-          package com.krishna.mobile;import android.app.*;import android.content.*;import android.os.*;import android.speech.*;import java.util.*;public class VoiceService extends Service implements RecognitionListener{SpeechRecognizer r;Handler h=new Handler();public IBinder onBind(Intent i){return null;}public int onStartCommand(Intent i,int f,int id){NotificationChannel c=new NotificationChannel("k","KRISHNA",NotificationManager.IMPORTANCE_LOW);((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(c);startForeground(8,new Notification.Builder(this,"k").setContentTitle("KRISHNA listening").setSmallIcon(android.R.drawable.ic_btn_speak_now).build());r=SpeechRecognizer.createSpeechRecognizer(this);r.setRecognitionListener(this);go();return START_STICKY;}void go(){try{Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"or-IN");i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true);i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,true);r.startListening(i);}catch(Exception e){h.postDelayed(()->go(),1500);}}public void onResults(Bundle b){ArrayList<String>x=b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);if(x!=null)for(String q:x)if(q.toLowerCase().contains("krishna")||q.contains("କୃଷ୍ଣ")){String vp=getSharedPreferences("k",0).getString("voiceprint","");if(!VoicePrint.verify(this,vp)){h.postDelayed(()->go(),500);return;}Intent a=new Intent(this,MainActivity.class);a.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);startActivity(a);}h.postDelayed(()->go(),700);}public void onError(int e){h.postDelayed(()->go(),1000);}public void onReadyForSpeech(Bundle b){}public void onBeginningOfSpeech(){}public void onRmsChanged(float f){}public void onBufferReceived(byte[]b){}public void onEndOfSpeech(){}public void onPartialResults(Bundle b){ArrayList<String>x=b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);if(x!=null)for(String q:x)if(q.toLowerCase().contains("krishna")||q.contains("କୃଷ୍ଣ")){Intent a=new Intent(this,MainActivity.class);a.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_SINGLE_TOP);startActivity(a);break;}}public void onEvent(int a,Bundle b){}}
-          EOF
-          gradle :app:assembleDebug
+
+          cp mobile_v3/MainActivity.java app/src/main/java/com/krishna/mobile/MainActivity.java
+          cp mobile_v3/index.html app/src/main/assets/index.html
+
+          npm init -y >/dev/null 2>&1
+          npm install three@0.180.0 --no-save
+          cp node_modules/three/build/three.module.js app/src/main/assets/three/three.module.js
+          cp node_modules/three/examples/jsm/loaders/GLTFLoader.js app/src/main/assets/three/GLTFLoader.js
+          sed -i "s/from 'three'/from '.\/three.module.js'/" app/src/main/assets/three/GLTFLoader.js
+
+      - name: Build APK
+        run: gradle :app:assembleDebug
+
+      - name: Verify Live 3D assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f app/build/outputs/apk/debug/app-debug.apk
+          test -f app/src/main/assets/index.html
+          test -f app/src/main/assets/three/three.module.js
+          test -f app/src/main/assets/three/GLTFLoader.js
+          grep -q "avatarBase64" app/src/main/java/com/krishna/mobile/MainActivity.java
+          grep -q "GLTFLoader" app/src/main/assets/index.html
+          grep -q "setMode" app/src/main/assets/index.html
+
       - uses: actions/upload-artifact@v4
         with:
-          name: KRISHNA-Connected-3D-APK
+          name: KRISHNA-Live-3D-APK
           path: app/build/outputs/apk/debug/app-debug.apk
