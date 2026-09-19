@@ -5,6 +5,8 @@ from .memory import MemoryStore
 from .router import ModelRouter
 from .config import settings
 from .project_graph import ProjectGraph
+from .graph_intelligence import GraphIntelligence
+from .gnn_backend import OptionalGNNBackend
 from .investigator import EvidenceEngine, InvestigationEngine, Evidence, Hypothesis
 from .verification import VerificationEngine
 from .recovery import RecoveryEngine
@@ -35,6 +37,8 @@ class Orchestrator:
         self.project_brain = ProjectBrain(self.memory)
         self.router = ModelRouter()
         self.graph = ProjectGraph()
+        self.graph_intelligence = GraphIntelligence(self.graph, self.memory)
+        self.gnn = OptionalGNNBackend()
         self.evidence = EvidenceEngine()
         self.investigator = InvestigationEngine(self.evidence)
         self.verifier = VerificationEngine()
@@ -217,6 +221,9 @@ Evidence:
     def investigate(self, symptom, project="general", components=None):
         context = self._project_context(project)
         context["components"] = components or []
+        context["graph_intelligence"] = self.graph_intelligence.rank(
+            [symptom] + list(components or []), hops=3, limit=20
+        )
         report = self.investigator.investigate(
             symptom=symptom,
             context=context,
