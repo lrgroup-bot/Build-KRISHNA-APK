@@ -1,7 +1,6 @@
 package com.krishna.mobile;
 
 import android.app.*;
-import androidx.core.app.NotificationCompat;
 import android.os.*;
 import android.content.*;
 import android.content.pm.PackageManager;
