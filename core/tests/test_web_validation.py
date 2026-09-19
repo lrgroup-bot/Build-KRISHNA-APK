@@ -8,10 +8,13 @@ class WebValidationTests(unittest.TestCase):
         for endpoint in (
             "/api/status", "/api/projects", "/api/core/chat",
             "/api/projects/index", "/api/investigate",
-            "/api/browser/inspect", "/api/research/github",
+            "/api/browser/inspect", "/api/research/github", "/api/plugins", "/api/tasks",
         ):
             self.assertIn(endpoint, text)
         self.assertIn("Run full web check", text)
+        self.assertIn("Vishwakarma", text)
+        self.assertIn("Karma", text)
+        self.assertIn("Work progress", text)
 
     def test_server_exposes_validation_route(self):
         root = Path(__file__).resolve().parents[1]

@@ -8,7 +8,6 @@ on:
       - feature/mobile-pc-control-safe-patch
       - main
       - feature/web-first-validation
-      - feature/graphical-control-room-voice
     paths:
       - 'core/**'
       - 'avatar/**'
@@ -30,7 +29,7 @@ jobs:
         shell: pwsh
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller playwright pywebview
+          python -m pip install pyinstaller playwright
 
       - name: Compile sources
         shell: pwsh

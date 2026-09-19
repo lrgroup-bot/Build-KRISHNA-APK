@@ -10,11 +10,18 @@ from .pc_observer import PCObserver
 from .device_pairing import DevicePairingStore
 from .realtime_session import RealtimeSessionStore
 from .plugin_runtime import PluginRegistry
+from .specialist_library import SpecialistLibrary
 
 orch = Orchestrator()
 _pairing = DevicePairingStore(Path(settings.db_path).resolve().parent / ".krishna_state")
 _sessions = RealtimeSessionStore(Path(settings.db_path).resolve().parent / ".krishna_state")
 _plugins = PluginRegistry(Path(settings.db_path).resolve().parent / ".krishna_state")
+_specialists = SpecialistLibrary(Path(settings.db_path).resolve().parent / ".krishna_state", Path(__file__).resolve().parents[2] / "external" / "agency-agents")
+try:
+    if _specialists.source_root.exists():
+        _specialists.index()
+except Exception:
+    pass
 started = time.time()
 activity = {"current_activity": "Idle", "updated": time.strftime("%Y-%m-%d %H:%M:%S"), "recent": []}
 _mobile_lock = threading.RLock()
@@ -52,14 +59,12 @@ if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
     DASHBOARD = _BUNDLE_ROOT / "dashboard.html"
     WEB_VALIDATION = _BUNDLE_ROOT / "web_validation.html"
     AVATAR_B64 = _BUNDLE_ROOT / "avatar" / "krishna_child_360.webp.b64"
-    AVATAR_GLB = _BUNDLE_ROOT / "avatar" / "krishna.glb"
 else:
     _CORE_ROOT = Path(__file__).resolve().parents[1]
     _REPO_ROOT = Path(__file__).resolve().parents[2]
     DASHBOARD = _CORE_ROOT / "dashboard.html"
     WEB_VALIDATION = _CORE_ROOT / "web_validation.html"
     AVATAR_B64 = _REPO_ROOT / "avatar" / "krishna_child_360.webp.b64"
-    AVATAR_GLB = _REPO_ROOT / "dashboard" / "assets" / "avatar" / "krishna.glb"
 
 
 def avatar_360_bytes():
@@ -161,10 +166,6 @@ class Handler(BaseHTTPRequestHandler):
             if not WEB_VALIDATION.exists():
                 return self._json(404, {"error": "web validation UI unavailable"})
             return self._html(200, WEB_VALIDATION.read_text(encoding="utf-8"))
-        if path == "/api/avatar-glb":
-            if not AVATAR_GLB.exists():
-                return self._json(404, {"error": "rigged baby KRISHNA GLB is not installed"})
-            return self._binary(200, AVATAR_GLB.read_bytes(), "model/gltf-binary")
         if path == "/api/avatar360":
             body = avatar_360_bytes()
             if not body:
@@ -247,6 +248,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"projects": orch.projects.list()})
         if path == "/api/plugins":
             return self._json(200, {"plugins": _plugins.list()})
+        if path == "/api/specialists":
+            return self._json(200, _specialists.status())
         if path == "/api/skills":
             project = (query.get("project") or [None])[0]
             return self._json(200, orch.skill_status(project))
@@ -255,6 +258,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {"actions": orch.actions.list(project)})
         if path == "/api/resources":
             return self._json(200, orch.governor.snapshot())
+        if path == "/api/tasks":
+            return self._json(200, {"tasks": orch.task_ledger.active()})
         if path in ("/api/core/neural-state", "/api/neural/state"):
             return self._json(200, orch.neural_state())
         if path == "/api/core/state":
@@ -411,10 +416,33 @@ class Handler(BaseHTTPRequestHandler):
             if str(data.get("source", "")).lower() == "mobile":
                 touch_mobile(self.headers.get("X-Krishna-Device") or "android-primary", self.path)
             msg = data.get("message", "")
-            mark("REQUEST RECEIVED", msg[:120])
+            mode = str(data.get("mode", "chat")).strip().lower()
+            if mode not in ("chat", "karma", "vishwakarma"):
+                return self._json(400, {"error": "mode must be chat, karma or vishwakarma"})
+            mark("REQUEST RECEIVED", f"{mode}: {msg[:110]}")
             try:
                 mark("KRISHNA WORKING", "Processing request")
-                out = orch.handle(msg, data.get("project", "general"), data.get("source", "pc"), data.get("chat_id"))
+                project = data.get("project", "general")
+                # KRISHNA is always the primary intelligence. Sudarshan is an internal
+                # managed-work capability selected automatically for explicit work modes.
+                if mode == "chat":
+                    if orch._looks_like_work_request(msg):
+                        out = orch.handle_managed_request(msg, project, data.get("source", "pc"), data.get("chat_id"))
+                        mode = "karma"
+                    else:
+                        out = orch.handle(msg, project, data.get("source", "pc"), data.get("chat_id"))
+                else:
+                    prefix = (
+                        "Internal Sudarshan/Karma work capability requested. Build a bounded plan, identify evidence and verification criteria, "
+                        "and never claim execution unless a registered action produced evidence. "
+                        if mode == "karma" else
+                        "Internal Sudarshan/Vishwakarma coding capability requested. Inspect project context, use the smallest safe implementation "
+                        "path, shadow/verification gates for mutations, and report concrete diffs/tests. "
+                    )
+                    out = orch.handle(prefix + "\n\nUser request: " + msg, project, data.get("source", "pc"), data.get("chat_id"))
+                out["mode"] = mode
+                out["identity"] = "KRISHNA"
+                out["capability"] = "conversation" if mode == "chat" else "sudarshan"
                 mark("REQUEST COMPLETE", "Response generated by Core")
                 activity["current_activity"] = "Idle"
                 orch.handle_event(
@@ -439,6 +467,26 @@ class Handler(BaseHTTPRequestHandler):
                 mark("ERROR", str(exc)[:160])
                 activity["current_activity"] = "Error"
                 return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/specialists/index":
+            try:
+                return self._json(200, _specialists.index(data.get("source_root") or None))
+            except ValueError as exc:
+                return self._json(400, {"error": str(exc)})
+
+        if self.path == "/api/specialists/select":
+            task = str(data.get("task", "")).strip()
+            if not task:
+                return self._json(400, {"error": "task is required"})
+            return self._json(200, {"selected": _specialists.select(task, int(data.get("limit", 5)))})
+
+        if self.path == "/api/specialists/context":
+            try:
+                return self._json(200, _specialists.context(str(data.get("id", ""))))
+            except KeyError:
+                return self._json(404, {"error": "specialist not found"})
+            except PermissionError as exc:
+                return self._json(403, {"error": str(exc)})
 
         if self.path == "/api/plugins/add":
             try:
