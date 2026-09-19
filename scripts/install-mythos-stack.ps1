@@ -33,17 +33,31 @@ $AriseRoot = Join-Path $InstallRoot "ARISE"
 $GooseRoot = Join-Path $InstallRoot "goose"
 
 @($InstallRoot,$ConfigRoot,$RuntimeRoot,$ShadowRoot,$LogRoot,$NpmRoot,$PythonRoot,$CuaRoot,$AriseRoot,$GooseRoot) | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
+$SessionLog = Join-Path $LogRoot ("mythos-install-" + (Get-Date -Format "yyyyMMdd-HHmmss") + ".log")
+try { Start-Transcript -Path $SessionLog -Force | Out-Null } catch {}
+
+function Test-Exe([string]$Path) {
+  return [bool]($Path -and (Test-Path -LiteralPath $Path -PathType Leaf))
+}
 
 Write-Step "Checking prerequisites"
 if (-not (Has-Cmd "git")) { throw "Git is required." }
 if (-not (Has-Cmd "python")) { throw "Python 3.10+ is required." }
 if (-not (Has-Cmd "npm")) { throw "Node.js/npm is required." }
 
-Write-Step "Installing mythos-agent into $NpmRoot"
-Run-Checked -Exe "npm" -Arguments @("install","-g","--prefix",$NpmRoot,"mythos-agent")
+$mythosExpected = Join-Path $NpmRoot "mythos-agent.cmd"
+if (Test-Exe $mythosExpected) { Write-Ok "mythos-agent already installed at $mythosExpected" }
+else {
+  Write-Step "Installing mythos-agent into $NpmRoot"
+  Run-Checked -Exe "npm" -Arguments @("install","-g","--prefix",$NpmRoot,"mythos-agent")
+}
 
-Write-Step "Installing CALM into $NpmRoot"
-Run-Checked -Exe "npm" -Arguments @("install","-g","--prefix",$NpmRoot,"@eilodon/calm-mcp")
+$calmExpected = Join-Path $NpmRoot "calm-mcp.cmd"
+if (Test-Exe $calmExpected) { Write-Ok "CALM already installed at $calmExpected" }
+else {
+  Write-Step "Installing CALM into $NpmRoot"
+  Run-Checked -Exe "npm" -Arguments @("install","-g","--prefix",$NpmRoot,"@eilodon/calm-mcp")
+}
 
 Write-Step "Creating shared KRISHNA Python agent environment"
 $AgentVenv = Join-Path $PythonRoot "agents"
@@ -178,3 +192,5 @@ $envFile = Join-Path $ConfigRoot "mythos-stack.env"
 Write-Ok "All KRISHNA tools targeted under $InstallRoot"
 Write-Host "Config: $envFile"
 Write-Host "Next run: scripts\verify-mythos-stack.ps1"
+Write-Host "Install log: $SessionLog"
+try { Stop-Transcript | Out-Null } catch {}
