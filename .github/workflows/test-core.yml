@@ -24,3 +24,24 @@ jobs:
         run: python -m compileall -q krishna_core
       - name: Run capability tests
         run: python -m unittest discover -s tests -v
+      - name: Smoke test Mobile to Core connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          KRISHNA_HOST=127.0.0.1 KRISHNA_PORT=18766 python -m krishna_core.server >/tmp/krishna-core.log 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS http://127.0.0.1:18766/api/status >/dev/null; then break; fi
+            sleep 0.5
+          done
+          curl -fsS -H 'X-Krishna-Device: android-primary' http://127.0.0.1:18766/api/core/state >/tmp/mobile-state.json
+          curl -fsS http://127.0.0.1:18766/api/mobile/connection >/tmp/mobile-connection.json
+          python - <<'PY'
+          import json
+          state=json.load(open('/tmp/mobile-connection.json', encoding='utf-8'))
+          assert state['connected'] is True, state
+          assert state['device'] == 'android-primary', state
+          assert state['last_path'] == '/api/core/state', state
+          print('KRISHNA Mobile backend connection verified:', state)
+          PY
