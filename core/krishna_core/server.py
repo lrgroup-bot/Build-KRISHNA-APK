@@ -189,6 +189,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/commitments/resume":
             project=(query.get("project") or [None])[0]
             return self._json(200,orch.resume_unfinished_work(project))
+        if path == "/api/software-factory/workers/status":
+            return self._json(200,orch.ephemeral_worker_status())
         if path == "/api/kabach/projects":
             return self._json(200,orch.protect_registered_projects())
         if path == "/api/commitments":
