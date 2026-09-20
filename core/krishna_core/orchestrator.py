@@ -261,6 +261,9 @@ class Orchestrator:
         return result
 
 
+    def garuda_status(self):
+        return self.garuda.status()
+
     def garuda_scout(self, project, goal, limit=10):
         if project != "KRISHNA" and not self.projects.get(project):
             raise KeyError(project)
