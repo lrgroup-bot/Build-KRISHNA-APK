@@ -33,6 +33,7 @@ from .promotion_manager import PromotionManager
 from .development_operator import DevelopmentOperator
 from .garuda import GarudaAgent
 from .gyan_bhandar import GyanBhandarAgent
+from .kabach import KabachAgent
 
 
 class Orchestrator:
@@ -76,6 +77,7 @@ class Orchestrator:
         self.research = GitHubResearchAgent()
         self.garuda = GarudaAgent(self.research, self.memory)
         self.gyan_bhandar = GyanBhandarAgent(self.memory, self.garuda)
+        self.kabach = KabachAgent(self.memory)
         self.goal_evaluator = GoalEvaluator()
         self._verification_checks = {}
         self.repair_agent = RepairAgent(
@@ -286,6 +288,15 @@ class Orchestrator:
     def gyan_strengthen(self, project, topic, use_garuda=True, limit=10):
         if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
         return self.gyan_bhandar.strengthen(project,topic,use_garuda,limit)
+
+    def kabach_inspect_text(self, project, text, source="unknown"):
+        return self.kabach.record(project,self.kabach.inspect_text(text,source),"text")
+
+    def kabach_inspect_egress(self, project, url, method="GET", allowed_domains=None, payload=None):
+        return self.kabach.record(project,self.kabach.inspect_egress(url,method,allowed_domains,payload),"egress")
+
+    def kabach_inspect_tool(self, project, tool, operation, permissions=None, approved=False):
+        return self.kabach.record(project,self.kabach.inspect_tool(tool,operation,permissions,approved),"tool")
 
     def development_sync(self, project):
         policy=self.projects.get(project)
