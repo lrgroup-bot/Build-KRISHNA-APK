@@ -54,6 +54,7 @@
 
 /* Spatial fit + private GLB avatar */
 .app{height:100dvh;min-height:0}.side{height:100dvh;overflow:auto}.main{height:100dvh}.view{height:calc(100dvh - 62px);min-height:0}.panelInner{min-height:0}.holoStage{min-height:0;height:min(72dvh,720px);max-height:720px}.krishnaAvatar{position:absolute;left:50%;top:50%;width:min(34vw,420px);height:min(58dvh,560px);transform:translate(-50%,-50%) translateZ(110px);z-index:4;filter:drop-shadow(0 28px 42px rgba(0,0,0,.5))}.krishnaAvatar model-viewer{width:100%;height:100%;background:transparent;--poster-color:transparent}.holoOrb{opacity:.16}.holoLabel{z-index:6}.holoNode{z-index:7}#home .panelInner{display:grid;grid-template-rows:minmax(0,1fr) auto auto;align-items:center;overflow:hidden}.grid{min-width:0}@media(max-height:760px){.holoStage{height:58dvh}.krishnaAvatar{height:48dvh}.holoCore{transform:translateZ(70px) scale(.92)}.holoLabel{top:260px}}@media(max-width:900px){.krishnaAvatar{width:min(64vw,360px);height:48dvh}}
+.gyanBrain{filter:drop-shadow(0 0 8px rgba(170,120,255,.45));transform-origin:center}.nav button:hover .gyanBrain,.nav button.active .gyanBrain{filter:drop-shadow(0 0 12px rgba(190,145,255,.85));transform:scale(1.08)}
 </style><script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
 </head><body><div class="app">
 <aside class="side"><div class="brand">KRISHNA<small>ALMIGHTY · LOCAL COMMAND CORE</small></div>
@@ -62,7 +63,7 @@
 <button onclick="showView('sudarshan')"><span class="ico">☸</span><span class="txt">Sudarshan</span></button>
 <button onclick="showView('projects')"><span class="ico">◇</span><span class="txt">Projects</span></button>
 <button onclick="showView('garuda')"><span id="garudaMenuIcon" class="ico garudaIcon">🦅</span><span class="txt">Garuda</span></button>
-<button onclick="showView('gyan')"><span class="ico">▤</span><span class="txt">Gyan-Bhandar</span></button>
+<button onclick="showView('gyan')"><span class="ico gyanBrain">🧠</span><span class="txt">Gyan-Bhandar</span></button>
 <button onclick="showView('plugins')"><span class="ico">⌘</span><span class="txt">Plugins</span></button>
 <button onclick="showView('specialists')"><span class="ico">✦</span><span class="txt">Specialists</span></button>
 <button onclick="showView('development')"><span class="ico">⌬</span><span class="txt">Developer</span></button>
