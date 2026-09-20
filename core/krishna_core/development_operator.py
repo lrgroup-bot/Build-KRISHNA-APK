@@ -86,7 +86,19 @@ class DevelopmentOperator:
         push=self._run(["git","push","origin",branch],rootp,300)
         return {"ok":push.ok,"steps":[asdict(push)],"branch":branch}
 
-    def verify(self,candidate_root,checks,frontend_url=None):
+    @staticmethod
+    def _match_api_expectations(network, expectations):
+        results=[]
+        for exp in expectations or []:
+            needle=str(exp.get("path") or "").strip()
+            method=str(exp.get("method") or "").upper()
+            statuses={int(x) for x in exp.get("statuses") or [200,201,202,204]}
+            matches=[x for x in network if needle and needle in str(x.get("url","")) and (not method or method==str(x.get("method","")).upper())]
+            ok=any(int(x.get("status",0)) in statuses for x in matches)
+            results.append({"path":needle,"method":method or None,"statuses":sorted(statuses),"ok":ok,"matches":matches[-10:]})
+        return results
+
+    def verify(self,candidate_root,checks,frontend_url=None,browser_actions=None,api_expectations=None,screenshot_path=None):
         root=Path(candidate_root).resolve();steps=[]
         allowed={"python-tests":["python","-m","unittest","discover","-s","tests"],"pytest":["python","-m","pytest","-q"],"npm-test":["npm","test","--","--runInBand"],"npm-build":["npm","run","build"],"npm-lint":["npm","run","lint"]}
         for name in checks:
@@ -95,7 +107,9 @@ class DevelopmentOperator:
             steps.append(self._run(cmd,root,300))
         browser=None
         if frontend_url:
-            try:browser=self.browser.inspect(frontend_url)
+            try:browser=self.browser.inspect(frontend_url,actions=browser_actions or [],screenshot_path=screenshot_path)
             except Exception as exc:browser={"ok":False,"findings":[{"kind":"browser_error","detail":str(exc),"severity":"error"}]}
-        ok=bool(steps or browser) and all(x.ok for x in steps) and (browser is None or bool(browser.get("ok")))
-        return {"verified":ok,"steps":[asdict(x) for x in steps],"browser":browser,"frontend_backend_connected":bool(browser and browser.get("ok") and browser.get("network"))}
+        api_checks=self._match_api_expectations((browser or {}).get("network") or [],api_expectations)
+        api_ok=all(x["ok"] for x in api_checks) if api_checks else (browser is None or bool(browser.get("network")))
+        ok=bool(steps or browser) and all(x.ok for x in steps) and (browser is None or bool(browser.get("ok"))) and api_ok
+        return {"verified":ok,"steps":[asdict(x) for x in steps],"browser":browser,"api_expectations":api_checks,"frontend_backend_connected":bool(browser and browser.get("ok") and api_ok)}
