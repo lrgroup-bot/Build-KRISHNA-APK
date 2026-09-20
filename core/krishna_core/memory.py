@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_chats_project_updated ON chats(project, active, updated_at);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_chat ON chat_messages(chat_id, id);
-CREATE INDEX IF NOT EXISTS idx_memory_project_kind ON memory(project, kind, active);
+CREATE INDEX IF NOT EXISTS idx_memory_project_kind ON memory(project, kind, active);\nCREATE TABLE IF NOT EXISTS learnings (\n id INTEGER PRIMARY KEY AUTOINCREMENT, project TEXT NOT NULL, topic TEXT NOT NULL, lesson TEXT NOT NULL, evidence TEXT NOT NULL DEFAULT '[]', confidence REAL NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'sudarshan', status TEXT NOT NULL DEFAULT 'candidate', fingerprint TEXT NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL, UNIQUE(project,fingerprint));\nCREATE INDEX IF NOT EXISTS idx_learnings_project_status ON learnings(project,status,updated_at);
 CREATE INDEX IF NOT EXISTS idx_incidents_project_status ON incidents(project, status);
 """
 
@@ -306,6 +306,32 @@ class MemoryStore:
                 for r in cur.fetchall()
             ]
 
+    def learn(self, project, topic, lesson, evidence=None, confidence=0.0, source="sudarshan", verified=False):
+        import hashlib
+        project=str(project or "KRISHNA").strip(); topic=str(topic or "").strip()[:240]; lesson=str(lesson or "").strip()
+        if not topic or not lesson: raise ValueError("topic and lesson are required")
+        fp=hashlib.sha256((topic.lower()+"|"+lesson.lower()).encode("utf-8","ignore")).hexdigest()
+        now=time.time(); status="verified" if verified else "candidate"; confidence=max(0.0,min(float(confidence),1.0))
+        with self.lock:
+            self.db.execute("""INSERT INTO learnings(project,topic,lesson,evidence,confidence,source,status,fingerprint,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(project,fingerprint) DO UPDATE SET evidence=excluded.evidence,confidence=MAX(learnings.confidence,excluded.confidence),source=excluded.source,status=CASE WHEN learnings.status='verified' THEN 'verified' ELSE excluded.status END,updated_at=excluded.updated_at""",
+                (project,topic,lesson,json.dumps(evidence or []),confidence,str(source or "sudarshan"),status,fp,now,now))
+            self.db.commit()
+        return {"project":project,"topic":topic,"lesson":lesson,"confidence":confidence,"source":source,"status":status,"fingerprint":fp}
+
+    def learnings(self, project, limit=100, verified_only=False):
+        with self.lock:
+            sql="SELECT topic,lesson,evidence,confidence,source,status,fingerprint,created_at,updated_at FROM learnings WHERE project=?"; args=[project]
+            if verified_only: sql+=" AND status='verified'"
+            sql+=" ORDER BY updated_at DESC LIMIT ?"; args.append(int(limit))
+            rows=self.db.execute(sql,tuple(args)).fetchall()
+        return [{"topic":r[0],"lesson":r[1],"evidence":json.loads(r[2]),"confidence":r[3],"source":r[4],"status":r[5],"fingerprint":r[6],"created_at":r[7],"updated_at":r[8]} for r in rows]
+
+    def verify_learning(self, project, fingerprint):
+        with self.lock:
+            cur=self.db.execute("UPDATE learnings SET status='verified',updated_at=? WHERE project=? AND fingerprint=?",(time.time(),project,fingerprint)); self.db.commit()
+        if not cur.rowcount: raise KeyError(fingerprint)
+        return True
 
     def close(self):
         with self.lock:
