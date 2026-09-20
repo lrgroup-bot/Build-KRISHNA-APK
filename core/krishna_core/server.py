@@ -201,6 +201,10 @@ class Handler(BaseHTTPRequestHandler):
             project=(query.get("project") or ["KRISHNA"])[0]
             try:return self._json(200,orch.model_pool(project))
             except KeyError:return self._json(404,{"error":"project not registered"})
+        if path == "/api/gyan-bhandar/pending":
+            project=(query.get("project") or [None])[0]
+            try:return self._json(200,orch.gyan_pending(project,100))
+            except KeyError:return self._json(404,{"error":"project not registered"})
         if path == "/api/gyan-bhandar/theory":
             project=(query.get("project") or ["KRISHNA"])[0].strip() or "KRISHNA"; topic=(query.get("topic") or [""])[0].strip()
             if not topic:return self._json(400,{"error":"topic is required"})
@@ -701,6 +705,18 @@ class Handler(BaseHTTPRequestHandler):
             try:return self._json(200,orch.testing_lead_live_verify(str(data.get("project") or "KRISHNA"),str(data.get("url") or ""),data.get("screenshot_dir"),int(data.get("max_controls") or 100)))
             except (ValueError,KeyError,RuntimeError,TypeError) as exc:return self._json(400,{"error":str(exc)})
 
+        if self.path == "/api/gyan-bhandar/propose":
+            project=str(data.get("project") or "KRISHNA").strip(); topic=str(data.get("topic") or "").strip(); lesson=str(data.get("lesson") or "").strip()
+            if not topic or not lesson:return self._json(400,{"error":"topic and lesson are required"})
+            try:return self._json(202,orch.gyan_propose(project,topic,lesson,data.get("evidence") or [],float(data.get("confidence") or 0),str(data.get("source") or "research"),bool(data.get("verified",False))))
+            except KeyError:return self._json(404,{"error":"project not registered"})
+            except (ValueError,TypeError) as exc:return self._json(400,{"error":str(exc)})
+
+        if self.path == "/api/gyan-bhandar/decide":
+            approval_id=str(data.get("approval_id") or "").strip()
+            if not approval_id or "approved" not in data:return self._json(400,{"error":"approval_id and approved are required"})
+            try:return self._json(200,orch.gyan_decide(approval_id,bool(data.get("approved"))))
+            except KeyError:return self._json(404,{"error":"pending finding not found"})
         if self.path == "/api/gyan-bhandar/store":
             project=str(data.get("project") or "KRISHNA").strip(); topic=str(data.get("topic") or "").strip(); lesson=str(data.get("lesson") or "").strip()
             if not topic or not lesson:return self._json(400,{"error":"topic and lesson are required"})
