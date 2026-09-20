@@ -306,10 +306,11 @@ class Orchestrator:
         self.memory.audit("development_push","completed" if result.get("ok") else "failed",project)
         return result
 
-    def development_verify(self, project, candidate_root, checks, frontend_url=None):
+    def development_verify(self, project, candidate_root, checks, frontend_url=None,
+                           browser_actions=None, api_expectations=None, screenshot_path=None):
         policy=self.projects.get(project)
         if not policy: raise KeyError(project)
-        result=self.development.verify(candidate_root,checks,frontend_url)
+        result=self.development.verify(candidate_root,checks,frontend_url,browser_actions,api_expectations,screenshot_path)
         self.memory.audit("development_verify","verified" if result.get("verified") else "failed",project)
         if result.get("verified"):
             result["promotion"]=self.prepare_promotion(project,candidate_root)
