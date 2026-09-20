@@ -1,12 +1,46 @@
 from __future__ import annotations
 from collections import Counter
 from urllib.parse import urlparse
-import re, time, uuid
+import re, time, uuid, hashlib, json, zlib
+from pathlib import Path
 
 class GyanBhandarAgent:
     """Evidence-backed knowledge curator. Stores and strengthens theory; KRISHNA remains decision authority."""
     def __init__(self, memory, garuda):
         self.memory=memory; self.garuda=garuda
+        state=Path(self.memory.db.execute("PRAGMA database_list").fetchone()[2]).resolve().parent/".krishna_state"
+        self.archive_root=state/"gyan_archive"; self.archive_root.mkdir(parents=True,exist_ok=True)
+        self.archive_index=self.archive_root/"index.jsonl"
+
+    def archive_file(self, project, source_path, topic="", remove_original=False):
+        src=Path(source_path).resolve()
+        if not src.is_file():raise FileNotFoundError(str(src))
+        raw=src.read_bytes(); digest=hashlib.sha256(raw).hexdigest()
+        target=self.archive_root/(digest+".zlib")
+        deduplicated=target.exists()
+        if not deduplicated:target.write_bytes(zlib.compress(raw,9))
+        record={"sha256":digest,"project":project,"topic":str(topic or src.name)[:240],"name":src.name,
+            "original_bytes":len(raw),"archive_bytes":target.stat().st_size,"archive":str(target),
+            "compression":"zlib-9","created_at":time.time(),"deduplicated":deduplicated}
+        with self.archive_index.open("a",encoding="utf-8") as h:h.write(json.dumps(record,separators=(",",":"))+"\n")
+        if remove_original:src.unlink()
+        self.memory.audit("gyan_file_archive","completed",f"{project}:{digest}:{record['original_bytes']}->{record['archive_bytes']}")
+        return {k:v for k,v in record.items() if k!="archive"}
+
+    def restore_file(self, sha256, destination):
+        digest=str(sha256).lower().strip()
+        if not re.fullmatch(r"[0-9a-f]{64}",digest):raise ValueError("invalid sha256")
+        src=self.archive_root/(digest+".zlib")
+        if not src.is_file():raise FileNotFoundError(digest)
+        raw=zlib.decompress(src.read_bytes())
+        if hashlib.sha256(raw).hexdigest()!=digest:raise ValueError("archive integrity check failed")
+        dst=Path(destination).resolve(); dst.parent.mkdir(parents=True,exist_ok=True); dst.write_bytes(raw)
+        return {"sha256":digest,"destination":str(dst),"bytes":len(raw),"verified":True}
+
+    def archive_status(self):
+        files=list(self.archive_root.glob("*.zlib"))
+        return {"agent":"Gyan-Bhandar","files":len(files),"compressed_bytes":sum(x.stat().st_size for x in files),
+            "policy":"content-addressed SHA-256 archive; duplicate files stored once; originals are retained unless explicit removal is requested"}
 
     @staticmethod
     def _terms(text):
