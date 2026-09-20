@@ -705,6 +705,9 @@ class Handler(BaseHTTPRequestHandler):
             try:return self._json(200,orch.testing_lead_live_verify(str(data.get("project") or "KRISHNA"),str(data.get("url") or ""),data.get("screenshot_dir"),int(data.get("max_controls") or 100)))
             except (ValueError,KeyError,RuntimeError,TypeError) as exc:return self._json(400,{"error":str(exc)})
 
+        if self.path == "/api/gyan-bhandar/compact":
+            return self._json(200,orch.gyan_compact())
+
         if self.path == "/api/gyan-bhandar/propose":
             project=str(data.get("project") or "KRISHNA").strip(); topic=str(data.get("topic") or "").strip(); lesson=str(data.get("lesson") or "").strip()
             if not topic or not lesson:return self._json(400,{"error":"topic and lesson are required"})
