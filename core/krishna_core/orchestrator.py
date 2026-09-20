@@ -30,6 +30,7 @@ from .task_ledger import TaskLedger
 from .project_brain import ProjectBrain
 from .specialist_library import SpecialistLibrary
 from .promotion_manager import PromotionManager
+from .development_operator import DevelopmentOperator
 
 
 class Orchestrator:
@@ -69,6 +70,7 @@ class Orchestrator:
         self.reviewer = VerificationReviewer()
         self.neural = NeuralActionGraph()
         self.browser = BrowserOperator()
+        self.development = DevelopmentOperator(self.browser)
         self.research = GitHubResearchAgent()
         self.goal_evaluator = GoalEvaluator()
         self._verification_checks = {}
@@ -256,6 +258,31 @@ class Orchestrator:
         if result.get("promoted") or result.get("rolled_back"): self._promotion_candidates.pop(token,None)
         return result
 
+
+    def development_sync(self, project):
+        policy=self.projects.get(project)
+        if not policy: raise KeyError(project)
+        result=self.development.sync(policy.root)
+        self.memory.audit("development_sync","completed" if result.get("ok") else "blocked",project)
+        return result
+
+    def development_stage(self, project, files):
+        policy=self.projects.get(project)
+        if not policy: raise KeyError(project)
+        result=self.development.stage(policy.root,files)
+        self.memory.audit("development_stage","completed",f"{project}:{result['file_count']}")
+        return result
+
+    def development_verify(self, project, candidate_root, checks, frontend_url=None):
+        policy=self.projects.get(project)
+        if not policy: raise KeyError(project)
+        result=self.development.verify(candidate_root,checks,frontend_url)
+        self.memory.audit("development_verify","verified" if result.get("verified") else "failed",project)
+        if result.get("verified"):
+            result["promotion"]=self.prepare_promotion(project,candidate_root)
+        else:
+            result["promotion"]=None
+        return result
 
     def register_project(self, name, root, privacy="local_only",
                          allowed_actions=None, verification_checks=None, metadata=None):
