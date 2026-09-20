@@ -658,6 +658,39 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError,PermissionError) as exc:return self._json(403 if isinstance(exc,PermissionError) else 400,{"error":str(exc)})
             except Exception as exc:return self._json(502,{"error":f"plugin request failed: {type(exc).__name__}: {exc}"})
 
+        if self.path == "/api/software-factory/create":
+            project=str(data.get("project") or "").strip(); goal=str(data.get("goal") or "").strip()
+            if not project or not goal:return self._json(400,{"error":"project and goal are required"})
+            try:return self._json(201,orch.create_software_project_team(project,goal,data.get("deadline_hours"),data.get("start_at"),data.get("end_at")))
+            except (ValueError,KeyError,TypeError) as exc:return self._json(400,{"error":str(exc)})
+
+        if self.path == "/api/software-factory/workers/request":
+            try:return self._json(201,orch.request_ephemeral_workers(str(data.get("project") or ""),str(data.get("manager") or ""),str(data.get("role") or ""),int(data.get("count") or 1),str(data.get("reason") or ""),data.get("hr_snapshot"),False))
+            except (ValueError,KeyError,TypeError) as exc:return self._json(400,{"error":str(exc)})
+
+        if self.path == "/api/software-factory/workers/approve":
+            try:return self._json(200,orch.request_ephemeral_workers(str(data.get("project") or ""),str(data.get("manager") or ""),str(data.get("role") or ""),int(data.get("count") or 1),str(data.get("reason") or ""),data.get("hr_snapshot"),True))
+            except (ValueError,KeyError,TypeError) as exc:return self._json(400,{"error":str(exc)})
+
+        if self.path == "/api/software-factory/workers/run":
+            try:return self._json(200,orch.run_ephemeral_workers(str(data.get("project") or ""),data.get("request") or {},str(data.get("task") or "")))
+            except (ValueError,KeyError,PermissionError,RuntimeError) as exc:return self._json(400,{"error":str(exc)})
+
+        if self.path == "/api/software-factory/gate":
+            try:return self._json(200,orch.software_project_gate(str(data.get("project") or ""),str(data.get("stage") or ""),bool(data.get("passed",False)),data.get("evidence") or [],data.get("defects") or []))
+            except (ValueError,KeyError,TypeError) as exc:return self._json(400,{"error":str(exc)})
+
+        if self.path == "/api/software-factory/hr":
+            try:return self._json(200,orch.software_factory_hr(str(data.get("project") or "KRISHNA"),data.get("workers") or [],data.get("deadline_at"),data.get("total_units"),data.get("completed_units")))
+            except (ValueError,KeyError,TypeError) as exc:return self._json(400,{"error":str(exc)})
+
+        if self.path == "/api/software-factory/test-plan":
+            return self._json(200,orch.software_factory_test_plan(data.get("project_type","web"),data.get("risk","medium"),bool(data.get("has_ui",True)),bool(data.get("has_api",True))))
+
+        if self.path == "/api/software-factory/testing-lead/verify":
+            try:return self._json(200,orch.testing_lead_live_verify(str(data.get("project") or "KRISHNA"),str(data.get("url") or ""),data.get("screenshot_dir"),int(data.get("max_controls") or 100)))
+            except (ValueError,KeyError,RuntimeError,TypeError) as exc:return self._json(400,{"error":str(exc)})
+
         if self.path == "/api/gyan-bhandar/store":
             project=str(data.get("project") or "KRISHNA").strip(); topic=str(data.get("topic") or "").strip(); lesson=str(data.get("lesson") or "").strip()
             if not topic or not lesson:return self._json(400,{"error":"topic and lesson are required"})
