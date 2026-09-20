@@ -273,6 +273,29 @@ class Orchestrator:
         self.memory.audit("development_stage","completed",f"{project}:{result['file_count']}")
         return result
 
+    def development_git_snapshot(self, project):
+        policy=self.projects.get(project)
+        if not policy: raise KeyError(project)
+        return self.development.git_snapshot(policy.root)
+
+    def development_commit(self, project, message, files, approved=False):
+        if not settings.allow_actions: raise PermissionError("KRISHNA_ALLOW_ACTIONS is disabled")
+        if not approved: raise PermissionError("explicit commit approval required")
+        policy=self.projects.get(project)
+        if not policy: raise KeyError(project)
+        result=self.development.commit_local(policy.root,message,files)
+        self.memory.audit("development_commit","completed" if result.get("ok") else "failed",project)
+        return result
+
+    def development_push(self, project, approved=False):
+        if not settings.allow_actions: raise PermissionError("KRISHNA_ALLOW_ACTIONS is disabled")
+        if not approved: raise PermissionError("explicit push approval required")
+        policy=self.projects.get(project)
+        if not policy: raise KeyError(project)
+        result=self.development.push_current(policy.root)
+        self.memory.audit("development_push","completed" if result.get("ok") else "failed",project)
+        return result
+
     def development_verify(self, project, candidate_root, checks, frontend_url=None):
         policy=self.projects.get(project)
         if not policy: raise KeyError(project)
