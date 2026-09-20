@@ -319,6 +319,13 @@ class Orchestrator:
             self.gyan_bhandar.store(project,"software_factory:"+stage,"Verified factory gate passed",evidence or [],1.0,"software_factory",True)
         return result
 
+    def testing_lead_live_verify(self,project,url,screenshot_dir=None,max_controls=100):
+        if project!="KRISHNA" and not self.projects.get(project): raise KeyError(project)
+        result=self.browser.exhaustive_clickthrough(url,screenshot_dir,max_controls)
+        if result.get("ok"):
+            self.gyan_bhandar.store(project,"testing_lead_live_verification","Live UI click-through passed",[result],1.0,"testing_lead",True)
+        return result
+
     def software_factory_hr(self,project,workers,deadline_at=None,total_units=None,completed_units=None):
         return self.software_factory.hr_status(project,workers,deadline_at,total_units,completed_units)
 
