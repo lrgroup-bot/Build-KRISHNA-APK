@@ -589,6 +589,18 @@ Evidence:
     def chat_messages(self, chat_id, limit=40):
         return self.memory.chat_messages(chat_id, limit)
 
+    def move_chat(self, chat_id, project):
+        if not self.projects.get(project):
+            raise KeyError(project)
+        item = self.memory.move_chat(chat_id, project)
+        self.memory.audit("chat_move", "completed", f"{chat_id}:{project}")
+        return item
+
+    def rename_chat(self, chat_id, title):
+        item = self.memory.rename_chat(chat_id, title)
+        self.memory.audit("chat_rename", "completed", chat_id)
+        return item
+
     def ingest_knowledge(self, project, source, text, metadata=None):
         trust = assess_untrusted_content(text, source)
         merged_metadata = dict(metadata or {})
