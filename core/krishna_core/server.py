@@ -63,12 +63,14 @@ if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
     DASHBOARD = _BUNDLE_ROOT / "dashboard.html"
     WEB_VALIDATION = _BUNDLE_ROOT / "web_validation.html"
     AVATAR_B64 = _BUNDLE_ROOT / "avatar" / "krishna_child_360.webp.b64"
+    AVATAR_GLB = _BUNDLE_ROOT / "avatar" / "krishna.glb"
 else:
     _CORE_ROOT = Path(__file__).resolve().parents[1]
     _REPO_ROOT = Path(__file__).resolve().parents[2]
     DASHBOARD = _CORE_ROOT / "dashboard.html"
     WEB_VALIDATION = _CORE_ROOT / "web_validation.html"
     AVATAR_B64 = _REPO_ROOT / "avatar" / "krishna_child_360.webp.b64"
+    AVATAR_GLB = _CORE_ROOT.parent / "dashboard" / "assets" / "avatar" / "krishna.glb"
 
 
 def avatar_360_bytes():
@@ -170,6 +172,9 @@ class Handler(BaseHTTPRequestHandler):
             if not WEB_VALIDATION.exists():
                 return self._json(404, {"error": "web validation UI unavailable"})
             return self._html(200, WEB_VALIDATION.read_text(encoding="utf-8"))
+        if path == "/api/avatar.glb":
+            if not AVATAR_GLB.is_file():return self._json(404,{"error":"private krishna.glb unavailable"})
+            return self._binary(200,AVATAR_GLB.read_bytes(),"model/gltf-binary")
         if path == "/api/avatar360":
             body = avatar_360_bytes()
             if not body:
