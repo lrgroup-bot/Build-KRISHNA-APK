@@ -60,6 +60,20 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 CREATE INDEX IF NOT EXISTS idx_chats_project_updated ON chats(project, active, updated_at);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_chat ON chat_messages(chat_id, id);
 CREATE INDEX IF NOT EXISTS idx_memory_project_kind ON memory(project, kind, active);\nCREATE TABLE IF NOT EXISTS learnings (\n id INTEGER PRIMARY KEY AUTOINCREMENT, project TEXT NOT NULL, topic TEXT NOT NULL, lesson TEXT NOT NULL, evidence TEXT NOT NULL DEFAULT '[]', confidence REAL NOT NULL DEFAULT 0, source TEXT NOT NULL DEFAULT 'sudarshan', status TEXT NOT NULL DEFAULT 'candidate', fingerprint TEXT NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL, UNIQUE(project,fingerprint));\nCREATE INDEX IF NOT EXISTS idx_learnings_project_status ON learnings(project,status,updated_at);
+CREATE TABLE IF NOT EXISTS gyan_pending (
+ approval_id TEXT PRIMARY KEY,
+ project TEXT NOT NULL,
+ topic TEXT NOT NULL,
+ lesson TEXT NOT NULL,
+ evidence TEXT NOT NULL DEFAULT '[]',
+ confidence REAL NOT NULL DEFAULT 0,
+ source TEXT NOT NULL DEFAULT 'research',
+ verified INTEGER NOT NULL DEFAULT 0,
+ status TEXT NOT NULL DEFAULT 'pending',
+ created_at REAL NOT NULL,
+ decided_at REAL
+);
+CREATE INDEX IF NOT EXISTS idx_gyan_pending_project_status ON gyan_pending(project,status,created_at);
 CREATE INDEX IF NOT EXISTS idx_incidents_project_status ON incidents(project, status);
 """
 
@@ -70,6 +84,38 @@ class MemoryStore:
         with self.lock:
             self.db.executescript(SCHEMA)
             self.db.commit()
+
+    def create_gyan_pending(self, approval_id, project, topic, lesson, evidence=None, confidence=0.0, source="research", verified=False):
+        now=time.time()
+        with self.lock:
+            self.db.execute(
+                "INSERT INTO gyan_pending(approval_id,project,topic,lesson,evidence,confidence,source,verified,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (approval_id,project,topic,lesson,json.dumps(evidence or []),float(confidence or 0),source,1 if verified else 0,"pending",now),
+            )
+            self.db.commit()
+        return self.gyan_pending(approval_id)
+
+    def gyan_pending(self, approval_id):
+        with self.lock:
+            r=self.db.execute("SELECT approval_id,project,topic,lesson,evidence,confidence,source,verified,status,created_at,decided_at FROM gyan_pending WHERE approval_id=?",(approval_id,)).fetchone()
+        if not r:return None
+        return {"approval_id":r[0],"project":r[1],"topic":r[2],"lesson":r[3],"evidence":json.loads(r[4]),"confidence":r[5],"source":r[6],"verified":bool(r[7]),"status":r[8],"created_at":r[9],"decided_at":r[10]}
+
+    def list_gyan_pending(self, project=None, status="pending", limit=100):
+        with self.lock:
+            if project:
+                rows=self.db.execute("SELECT approval_id FROM gyan_pending WHERE project=? AND status=? ORDER BY created_at DESC LIMIT ?",(project,status,limit)).fetchall()
+            else:
+                rows=self.db.execute("SELECT approval_id FROM gyan_pending WHERE status=? ORDER BY created_at DESC LIMIT ?",(status,limit)).fetchall()
+        return [self.gyan_pending(r[0]) for r in rows]
+
+    def decide_gyan_pending(self, approval_id, status):
+        if status not in {"approved","rejected"}:raise ValueError("status must be approved or rejected")
+        with self.lock:
+            cur=self.db.execute("UPDATE gyan_pending SET status=?,decided_at=? WHERE approval_id=? AND status='pending'",(status,time.time(),approval_id))
+            self.db.commit()
+        if not cur.rowcount:raise KeyError(approval_id)
+        return self.gyan_pending(approval_id)
 
     def remember(self, project, kind, content, metadata=None):
         with self.lock:
