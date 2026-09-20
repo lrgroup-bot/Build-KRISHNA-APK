@@ -79,7 +79,7 @@ class BrowserOperator:
                 f"{req.method} {req.url} :: {req.failure}"
             ))
             page.on("response", lambda resp: (
-                network.append({"url": resp.url, "status": resp.status}),
+                network.append({"url": resp.url, "status": resp.status, "method": resp.request.method}),
                 bad_responses.append(f"{resp.status} {resp.url}") if resp.status >= 400 else None,
             ))
             page.goto(url, wait_until="networkidle")
