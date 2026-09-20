@@ -51,6 +51,41 @@ class DevelopmentOperator:
             target.parent.mkdir(parents=True,exist_ok=True);target.write_text(str(item.get("content","")),encoding="utf-8");changed.append(rel)
         return {"candidate_root":str(candidate),"files":changed,"file_count":len(changed)}
 
+    def git_snapshot(self, root):
+        rootp=Path(root).resolve()
+        if not (rootp/".git").exists():return {"ok":False,"detail":"project is not a git working tree"}
+        branch=self._run(["git","branch","--show-current"],rootp)
+        head=self._run(["git","rev-parse","HEAD"],rootp)
+        status=self._run(["git","status","--porcelain"],rootp)
+        return {"ok":branch.ok and head.ok and status.ok,"branch":branch.detail.strip(),
+                "head":head.detail.strip(),"clean":not bool(status.detail.strip()),"status":status.detail.strip()}
+
+    def commit_local(self, root, message, files):
+        rootp=Path(root).resolve()
+        if not (rootp/".git").exists():return {"ok":False,"detail":"project is not a git working tree"}
+        safe=[]
+        for rel in files:
+            rel=str(rel).replace("\\","/").strip("/")
+            if not rel or rel.startswith("../") or "/../" in rel:raise ValueError("invalid git path")
+            target=(rootp/rel).resolve()
+            try:target.relative_to(rootp)
+            except ValueError as exc:raise ValueError("git path escapes project") from exc
+            safe.append(rel)
+        if not safe:raise ValueError("explicit file list is required")
+        add=self._run(["git","add","--",*safe],rootp)
+        if not add.ok:return {"ok":False,"steps":[asdict(add)]}
+        commit=self._run(["git","commit","-m",str(message)[:200]],rootp)
+        return {"ok":commit.ok,"steps":[asdict(add),asdict(commit)],"snapshot":self.git_snapshot(root)}
+
+    def push_current(self, root):
+        rootp=Path(root).resolve(); snap=self.git_snapshot(root)
+        if not snap.get("ok"):return snap
+        if not snap.get("clean"):return {"ok":False,"blocked":True,"detail":"working tree must be clean before push"}
+        branch=snap.get("branch")
+        if not branch:return {"ok":False,"blocked":True,"detail":"detached HEAD is not pushable"}
+        push=self._run(["git","push","origin",branch],rootp,300)
+        return {"ok":push.ok,"steps":[asdict(push)],"branch":branch}
+
     def verify(self,candidate_root,checks,frontend_url=None):
         root=Path(candidate_root).resolve();steps=[]
         allowed={"python-tests":["python","-m","unittest","discover","-s","tests"],"pytest":["python","-m","pytest","-q"],"npm-test":["npm","test","--","--runInBand"],"npm-build":["npm","run","build"],"npm-lint":["npm","run","lint"]}
