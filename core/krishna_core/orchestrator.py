@@ -279,6 +279,10 @@ class Orchestrator:
         if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
         return self.gyan_bhandar.recall(project,topic,limit,verified_only)
 
+    def gyan_theory(self, project, topic, limit=25):
+        if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
+        return self.gyan_bhandar.theory(project,topic,limit)
+
     def gyan_strengthen(self, project, topic, use_garuda=True, limit=10):
         if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
         return self.gyan_bhandar.strengthen(project,topic,use_garuda,limit)
