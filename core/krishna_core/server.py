@@ -602,6 +602,24 @@ class Handler(BaseHTTPRequestHandler):
                 mark("INVESTIGATION ERROR", str(exc)[:160])
                 return self._json(500, {"error": str(exc)})
 
+        if self.path == "/api/development/git/status":
+            project=str(data.get("project","")).strip()
+            if not project:return self._json(400,{"error":"project is required"})
+            try:return self._json(200,orch.development_git_snapshot(project))
+            except KeyError:return self._json(404,{"error":"project not registered"})
+
+        if self.path == "/api/development/git/commit":
+            project=str(data.get("project","")).strip()
+            try:return self._json(200,orch.development_commit(project,str(data.get("message","KRISHNA verified change")),data.get("files") or [],bool(data.get("approved",False))))
+            except KeyError:return self._json(404,{"error":"project not registered"})
+            except (ValueError,PermissionError) as exc:return self._json(403 if isinstance(exc,PermissionError) else 400,{"error":str(exc)})
+
+        if self.path == "/api/development/git/push":
+            project=str(data.get("project","")).strip()
+            try:return self._json(200,orch.development_push(project,bool(data.get("approved",False))))
+            except KeyError:return self._json(404,{"error":"project not registered"})
+            except PermissionError as exc:return self._json(403,{"error":str(exc)})
+
         if self.path == "/api/development/sync":
             project=str(data.get("project","")).strip()
             if not project:return self._json(400,{"error":"project is required"})
