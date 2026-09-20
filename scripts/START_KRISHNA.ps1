@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory=$false)]
-    [string]$KrishnaRoot = "C:\KRISHNA-v3",
+    [string]$KrishnaRoot = "E:\Krishna-The GOD",
 
     [Parameter(Mandatory=$false)]
     [int]$Port = 8766
@@ -70,31 +70,37 @@ if (Test-Path -LiteralPath $consoleExe) {
     exit $LASTEXITCODE
 }
 
-$python = Get-Command python -ErrorAction SilentlyContinue
-if (-not $python) {
-    $python = Get-Command py -ErrorAction SilentlyContinue
+$venvPython = Join-Path $KrishnaRoot ".venv\Scripts\python.exe"
+$pythonPath = $null
+if (Test-Path -LiteralPath $venvPython) {
+    $pythonPath = $venvPython
+} else {
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) { $python = Get-Command py -ErrorAction SilentlyContinue }
+    if ($python) { $pythonPath = $python.Source }
 }
-if (-not $python) {
+if (-not $pythonPath) {
     throw "Python was not found and no KRISHNA executable is installed."
 }
+$env:PYTHONPATH = $coreDir
 
 Push-Location $coreDir
 try {
     if (Test-Path -LiteralPath $desktopPy) {
         Write-Host "Starting KRISHNA desktop from source..." -ForegroundColor Green
-        & $python.Source $desktopPy
+        & $pythonPath $desktopPy
         exit $LASTEXITCODE
     }
 
     if (Test-Path -LiteralPath $consolePy) {
         Write-Host "Starting KRISHNA console from source..." -ForegroundColor Green
-        & $python.Source $consolePy
+        & $pythonPath $consolePy
         exit $LASTEXITCODE
     }
 
     if (Test-Path -LiteralPath $runCorePy) {
         Write-Host "Starting KRISHNA Core..." -ForegroundColor Green
-        & $python.Source $runCorePy
+        & $pythonPath $runCorePy
         exit $LASTEXITCODE
     }
 
