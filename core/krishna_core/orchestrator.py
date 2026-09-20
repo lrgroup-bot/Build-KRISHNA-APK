@@ -291,6 +291,17 @@ class Orchestrator:
         if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
         return self.gyan_bhandar.strengthen(project,topic,use_garuda,limit)
 
+    def resume_unfinished_work(self, project=None):
+        unfinished=self.commitments.list(project,True,500)
+        active_ids={x.get("task_id") for x in self.task_ledger.active()}
+        return {"agent":"KRISHNA","project":project,"unfinished":unfinished,"active_task_ids":sorted(x for x in active_ids if x),"needs_attention":[x for x in unfinished if x.get("status") in {"decided","planned","blocked","waiting_approval"}],"policy":"Never silently discard an unfinished decision. Resume, explicitly supersede, cancel, or complete it."}
+
+    def protect_registered_projects(self):
+        out=[]
+        for p in self.memory.projects():
+            out.append(self.kabach.protect_project(p["name"],p["root"]))
+        return {"agent":"KABACH","projects":out,"count":len(out)}
+
     def commitments_status(self, project=None):
         return {"unfinished":self.commitments.list(project,True,500),"forgotten":self.commitments.forgotten(project,86400)}
 
