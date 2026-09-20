@@ -297,6 +297,10 @@ class Orchestrator:
         if project!="KRISHNA" and not self.projects.get(project):raise KeyError(project)
         return self.software_factory.plan(project,goal,deadline_hours)
 
+    def request_ephemeral_workers(self,project,manager,role,count,reason,hr_snapshot=None,approve=False):
+        if project!="KRISHNA" and not self.projects.get(project):raise KeyError(project)
+        return self.software_factory.worker_request(project,manager,role,count,reason,hr_snapshot or {},bool(approve))
+
     def software_project_gate(self,project,stage,passed,evidence=None,defects=None):
         return self.software_factory.gate(project,stage,passed,evidence,defects)
 
