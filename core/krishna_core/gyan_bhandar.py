@@ -39,6 +39,11 @@ class GyanBhandarAgent:
         self.memory.audit("gyan_bhandar_proposal","approved",approval_id)
         return {**out,"stored":True,"learning":stored}
 
+    def compact_storage(self):
+        result=self.memory.compact_gyan_storage()
+        self.memory.audit("gyan_bhandar_compact","completed",f"{result['records_compacted']} records; {result['bytes_saved']} bytes saved")
+        return {"agent":"Gyan-Bhandar",**result}
+
     def recall(self, project, topic=None, limit=50, verified_only=False):
         rows=self.memory.learnings(project,limit,verified_only)
         if topic:
