@@ -31,6 +31,7 @@ from .project_brain import ProjectBrain
 from .specialist_library import SpecialistLibrary
 from .promotion_manager import PromotionManager
 from .development_operator import DevelopmentOperator
+from .garuda import GarudaAgent
 
 
 class Orchestrator:
@@ -72,6 +73,7 @@ class Orchestrator:
         self.browser = BrowserOperator()
         self.development = DevelopmentOperator(self.browser)
         self.research = GitHubResearchAgent()
+        self.garuda = GarudaAgent(self.research, self.memory)
         self.goal_evaluator = GoalEvaluator()
         self._verification_checks = {}
         self.repair_agent = RepairAgent(
@@ -258,6 +260,11 @@ class Orchestrator:
         if result.get("promoted") or result.get("rolled_back"): self._promotion_candidates.pop(token,None)
         return result
 
+
+    def garuda_scout(self, project, goal, limit=10):
+        if project != "KRISHNA" and not self.projects.get(project):
+            raise KeyError(project)
+        return self.garuda.scout(project,goal,limit)
 
     def development_sync(self, project):
         policy=self.projects.get(project)
