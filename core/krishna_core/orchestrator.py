@@ -295,9 +295,9 @@ class Orchestrator:
         if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
         return self.gyan_bhandar.strengthen(project,topic,use_garuda,limit)
 
-    def create_software_project_team(self,project,goal,deadline_hours=None):
+    def create_software_project_team(self,project,goal,deadline_hours=None,start_at=None,end_at=None):
         if project!="KRISHNA" and not self.projects.get(project):raise KeyError(project)
-        return self.software_factory.plan(project,goal,deadline_hours)
+        return self.software_factory.plan(project,goal,deadline_hours,start_at,end_at)
 
     def request_ephemeral_workers(self,project,manager,role,count,reason,hr_snapshot=None,approve=False):
         if project!="KRISHNA" and not self.projects.get(project):raise KeyError(project)
