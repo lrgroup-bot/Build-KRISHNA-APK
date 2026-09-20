@@ -46,6 +46,40 @@ class BrowserOperator:
             findings.append(asdict(BrowserFinding("http_error", str(item))))
         return findings
 
+    def exhaustive_clickthrough(self, url: str, screenshot_dir: str | None = None, max_controls: int = 100) -> dict:
+        """Testing-Lead live traversal of visible interactive controls with evidence."""
+        try:
+            from playwright.sync_api import sync_playwright
+        except Exception as exc:
+            raise RuntimeError("Chromium operator unavailable") from exc
+        evidence=[]; findings=[]; started=time.perf_counter()
+        with sync_playwright() as p:
+            try: browser=p.chromium.launch(channel="chrome",headless=self.headless)
+            except Exception: browser=p.chromium.launch(headless=self.headless)
+            page=browser.new_page(); page.set_default_timeout(self.timeout_ms)
+            page_errors=[]; page.on("pageerror",lambda e:page_errors.append(str(e)))
+            page.goto(url,wait_until="networkidle")
+            controls=page.locator("button, a[href], input[type=button], input[type=submit], [role=button]")
+            count=min(controls.count(),max(1,int(max_controls)))
+            for i in range(count):
+                try:
+                    control=controls.nth(i); label=(control.inner_text() or control.get_attribute("aria-label") or control.get_attribute("value") or "")[:160]
+                    href=control.get_attribute("href"); before=page.url
+                    if href and (href.startswith("http") and not href.startswith(url.split("/",3)[0]+"//"+url.split("/",3)[2])):
+                        evidence.append({"index":i,"label":label,"skipped":"external_navigation"}); continue
+                    control.click(timeout=min(self.timeout_ms,5000)); page.wait_for_timeout(150)
+                    evidence.append({"index":i,"label":label,"before":before,"after":page.url,"ok":True})
+                    if page.url!=before: page.go_back(wait_until="domcontentloaded")
+                except Exception as exc:
+                    evidence.append({"index":i,"ok":False,"error":str(exc)[:500]})
+            findings.extend(self.summarize_findings(page_errors=page_errors))
+            shot=None
+            if screenshot_dir:
+                target=Path(screenshot_dir).resolve();target.mkdir(parents=True,exist_ok=True);shot=target/"testing-lead-final.png";page.screenshot(path=str(shot),full_page=True)
+            browser.close()
+        failed=[x for x in evidence if not x.get("ok") and not x.get("skipped")]
+        return {"url":url,"controls_checked":len(evidence),"evidence":evidence,"findings":findings,"screenshot":str(shot) if shot else None,"ok":not failed and not findings,"elapsed_ms":int((time.perf_counter()-started)*1000)}
+
     def inspect(self, url: str, actions: list[dict] | None = None,
                 screenshot_path: str | None = None) -> dict:
         if not url.startswith(("http://", "https://")):
