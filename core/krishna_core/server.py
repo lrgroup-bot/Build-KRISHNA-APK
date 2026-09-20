@@ -167,7 +167,8 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(parsed.query)
 
         if path in ("/", "/dashboard"):
-            return self._html(200, DASHBOARD.read_text(encoding="utf-8"))
+            ui = WEB_VALIDATION if WEB_VALIDATION.exists() else DASHBOARD
+            return self._html(200, ui.read_text(encoding="utf-8"))
         if path in ("/web", "/web-test", "/validation"):
             if not WEB_VALIDATION.exists():
                 return self._json(404, {"error": "web validation UI unavailable"})
