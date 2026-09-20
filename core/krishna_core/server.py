@@ -670,7 +670,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/development/verify":
             project=str(data.get("project","")).strip(); candidate=str(data.get("candidate_root","")).strip()
             if not project or not candidate:return self._json(400,{"error":"project and candidate_root are required"})
-            try:return self._json(200,orch.development_verify(project,candidate,data.get("checks") or [],data.get("frontend_url")))
+            try:return self._json(200,orch.development_verify(project,candidate,data.get("checks") or [],data.get("frontend_url"),data.get("browser_actions") or [],data.get("api_expectations") or [],data.get("screenshot_path") or None))
             except KeyError:return self._json(404,{"error":"project not registered"})
             except (ValueError,OSError,RuntimeError) as exc:return self._json(400,{"error":str(exc)})
 
