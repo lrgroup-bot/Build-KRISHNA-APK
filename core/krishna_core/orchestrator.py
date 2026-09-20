@@ -32,6 +32,7 @@ from .specialist_library import SpecialistLibrary
 from .promotion_manager import PromotionManager
 from .development_operator import DevelopmentOperator
 from .garuda import GarudaAgent
+from .gyan_bhandar import GyanBhandarAgent
 
 
 class Orchestrator:
@@ -74,6 +75,7 @@ class Orchestrator:
         self.development = DevelopmentOperator(self.browser)
         self.research = GitHubResearchAgent()
         self.garuda = GarudaAgent(self.research, self.memory)
+        self.gyan_bhandar = GyanBhandarAgent(self.memory, self.garuda)
         self.goal_evaluator = GoalEvaluator()
         self._verification_checks = {}
         self.repair_agent = RepairAgent(
@@ -268,6 +270,18 @@ class Orchestrator:
         if project != "KRISHNA" and not self.projects.get(project):
             raise KeyError(project)
         return self.garuda.scout(project,goal,limit)
+
+    def gyan_store(self, project, topic, lesson, evidence=None, confidence=0.0, source="sudarshan", verified=False):
+        if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
+        return self.gyan_bhandar.store(project,topic,lesson,evidence,confidence,source,verified)
+
+    def gyan_recall(self, project, topic=None, limit=50, verified_only=False):
+        if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
+        return self.gyan_bhandar.recall(project,topic,limit,verified_only)
+
+    def gyan_strengthen(self, project, topic, use_garuda=True, limit=10):
+        if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
+        return self.gyan_bhandar.strengthen(project,topic,use_garuda,limit)
 
     def development_sync(self, project):
         policy=self.projects.get(project)
