@@ -1,5 +1,6 @@
 from __future__ import annotations
 from collections import Counter
+from urllib.parse import urlparse
 import re, time
 
 class GyanBhandarAgent:
@@ -23,6 +24,24 @@ class GyanBhandarAgent:
             rows.sort(key=lambda x:len(wanted & self._terms(x["topic"]+" "+x["lesson"])),reverse=True)
         return rows
 
+    def theory(self, project, topic, limit=25):
+        rows=self.recall(project,topic,limit=limit)
+        verified=[x for x in rows if x.get("status")=="verified"]
+        candidates=[x for x in rows if x.get("status")!="verified"]
+        evidence=[]; domains=Counter()
+        for row in rows:
+            for ev in row.get("evidence") or []:
+                if isinstance(ev,dict):
+                    u=str(ev.get("url") or "")
+                    if u:
+                        domains[urlparse(u).netloc or "local"]+=1
+                    evidence.append(ev)
+        return {"agent":"Gyan-Bhandar","project":project,"topic":topic,
+            "theory":{"verified_lessons":[x["lesson"] for x in verified[:8]],"candidate_lessons":[x["lesson"] for x in candidates[:8]],
+                "implementation_rule":"Verified lessons may inform KRISHNA decisions; candidate lessons require evidence or tests before promotion.",
+                "evidence_count":len(evidence),"independent_domains":len(domains),"domains":dict(domains)},
+            "decision_authority":"KRISHNA","implementation_executor":"Sudarshan"}
+
     def strengthen(self, project, topic, use_garuda=True, limit=10):
         existing=self.recall(project,topic,limit=50)
         research=None
@@ -41,6 +60,7 @@ class GyanBhandarAgent:
         result={
             "agent":"Gyan-Bhandar","project":project,"topic":topic,
             "existing_learnings":existing,
+            "current_theory":self.theory(project,topic,limit=50),
             "new_evidence":evidence[:max(10,limit*3)],
             "source_diversity":dict(source_counts),
             "theory_status":"evidence_collected" if evidence else "memory_only",
