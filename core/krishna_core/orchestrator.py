@@ -34,6 +34,7 @@ from .development_operator import DevelopmentOperator
 from .garuda import GarudaAgent
 from .gyan_bhandar import GyanBhandarAgent
 from .kabach import KabachAgent
+from .commitment_ledger import CommitmentLedger
 
 
 class Orchestrator:
@@ -41,6 +42,7 @@ class Orchestrator:
         self.db_path = str(db_path or settings.db_path)
         self.memory = MemoryStore(self.db_path)
         self.task_ledger = TaskLedger(self.db_path)
+        self.commitments = CommitmentLedger(self.db_path)
         self.project_brain = ProjectBrain(self.memory)
         self.router = ModelRouter()
         self.graph = ProjectGraph()
@@ -288,6 +290,26 @@ class Orchestrator:
     def gyan_strengthen(self, project, topic, use_garuda=True, limit=10):
         if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
         return self.gyan_bhandar.strengthen(project,topic,use_garuda,limit)
+
+    def commitments_status(self, project=None):
+        return {"unfinished":self.commitments.list(project,True,500),"forgotten":self.commitments.forgotten(project,86400)}
+
+    def remember_commitment(self, project, title, detail=None, source="KRISHNA"):
+        return self.commitments.add(project,title,detail,source)
+
+    def complete_commitment(self, commitment_id, status="completed", detail=None):
+        return self.commitments.update(commitment_id,status,detail)
+
+    def model_pool(self, project="KRISHNA"):
+        policy=self.projects.get(project) if project!="KRISHNA" else None
+        privacy=policy.privacy if policy else "approved_cloud"
+        return {"providers":self.router.available(),"coding_plan":self.router.coding_plan(privacy),"privacy":privacy}
+
+    def kabach_security_research(self, project, question, limit=10):
+        if project!="KRISHNA" and not self.projects.get(project):raise KeyError(project)
+        report=self.garuda.scout(project,"cybersecurity defensive research "+str(question),limit)
+        self.memory.remember(project,"kabach_security_research",str(question),{"garuda_report":report})
+        return {"agent":"KABACH","researcher":"Garuda","project":project,"question":question,"report":report,"decision_authority":"KRISHNA"}
 
     def kabach_inspect_text(self, project, text, source="unknown"):
         return self.kabach.record(project,self.kabach.inspect_text(text,source),"text")
