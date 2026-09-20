@@ -68,15 +68,6 @@ class KabachAgent:
         data={"kind":"tool","tool":tool,"operation":operation,"evidence":evidence}
         return KabachVerdict(not blocked,"allow" if not blocked else "block","policy satisfied" if not blocked else "tool policy violation","low" if not blocked else "high",tuple(evidence),self._receipt(data)).as_dict()
 
-    def protect_project(self, project, root, privacy="local_only"):
-        rootv=self.inspect_path(root,root,write=False)
-        controls={"project":project,"root":str(Path(root).resolve()),"privacy":privacy,"protected":rootv["allowed"],
-            "controls":["secret_scan","path_scope","egress_default_deny","tool_permission_gate","audit_receipts","untrusted_content_boundary"],
-            "internet_research_owner":"Garuda","decision_authority":"KRISHNA"}
-        self.memory.remember(project,"kabach_security_profile","project protection profile",controls)
-        self.memory.audit("kabach_project_protection","enabled" if controls["protected"] else "blocked",json.dumps(controls))
-        return controls
-
     def research_security(self, project, question, garuda, limit=10):
         question=str(question or "").strip()
         if not question: raise ValueError("security research question is required")
@@ -94,12 +85,12 @@ class KabachAgent:
         self.memory.audit("kabach_security_research","completed",f"{project}:{len(safe)} web:{len(repos)} repos")
         return result
 
-    def protect_project(self,project,root):
+    def protect_project(self,project,root,privacy="local_only"):
         checks=[]
         for name in (".env",".git/config","requirements.txt","pyproject.toml","package.json","package-lock.json"):
             p=Path(root)/name
             if p.exists(): checks.append({"path":str(p),"verdict":self.inspect_path(p,root,False)})
-        return {"agent":"KABACH","project":project,"root":str(Path(root).resolve()),"checks":checks,"policy":{"egress":"default_deny","secrets":"never_transmit","project_scope":"enforced","external_content":"untrusted","security_research":"delegate_to_garuda"}}
+        return {"agent":"KABACH","project":project,"root":str(Path(root).resolve()),"checks":checks,"privacy":privacy,"protected":True,"controls":["secret_scan","path_scope","egress_default_deny","tool_permission_gate","audit_receipts","untrusted_content_boundary"],"policy":{"egress":"default_deny","secrets":"never_transmit","project_scope":"enforced","external_content":"untrusted","security_research":"delegate_to_garuda","decision_authority":"KRISHNA"}}
 
     def gate_external_evidence(self,text,source="external"):
         verdict=self.inspect_text(text,source)
