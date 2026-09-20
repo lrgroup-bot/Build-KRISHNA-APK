@@ -10,12 +10,16 @@ from .pc_observer import PCObserver
 from .device_pairing import DevicePairingStore
 from .realtime_session import RealtimeSessionStore
 from .plugin_runtime import PluginRegistry
+from .plugin_executor import PluginExecutor
+from .attachments import AttachmentStore
 from .specialist_library import SpecialistLibrary
 
 orch = Orchestrator()
 _pairing = DevicePairingStore(Path(settings.db_path).resolve().parent / ".krishna_state")
 _sessions = RealtimeSessionStore(Path(settings.db_path).resolve().parent / ".krishna_state")
 _plugins = PluginRegistry(Path(settings.db_path).resolve().parent / ".krishna_state")
+_plugin_executor = PluginExecutor(_plugins)
+_attachments = AttachmentStore(Path(settings.db_path).resolve().parent / ".krishna_state")
 _specialists = SpecialistLibrary(Path(settings.db_path).resolve().parent / ".krishna_state", Path(__file__).resolve().parents[2] / "external" / "agency-agents")
 try:
     if _specialists.source_root.exists():
@@ -171,6 +175,10 @@ class Handler(BaseHTTPRequestHandler):
             if not body:
                 return self._json(404, {"error": "avatar asset unavailable"})
             return self._binary(200, body, "image/webp")
+        if path == "/api/attachments":
+            chat_id=(query.get("chat_id") or [""])[0].strip()
+            if not chat_id:return self._json(400,{"error":"chat_id is required"})
+            return self._json(200,{"attachments":_attachments.list(chat_id)})
         if path == "/api/garuda/status":
             return self._json(200, orch.garuda_status())
         if path in ("/health", "/api/status"):
@@ -603,6 +611,22 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 mark("INVESTIGATION ERROR", str(exc)[:160])
                 return self._json(500, {"error": str(exc)})
+
+        if self.path == "/api/attachments":
+            chat_id=str(data.get("chat_id") or "").strip()
+            if not chat_id or not orch.memory.chat(chat_id):return self._json(404,{"error":"chat not found"})
+            try:
+                item=_attachments.save(chat_id,data.get("name"),data.get("data_b64"),data.get("content_type"))
+                orch.memory.add_chat_message(chat_id,"tool","Attachment added",{"attachment":item})
+                return self._json(201,item)
+            except (ValueError,TypeError) as exc:return self._json(400,{"error":str(exc)})
+
+        if self.path == "/api/plugins/execute":
+            try:
+                return self._json(200,_plugin_executor.execute(str(data.get("plugin_id") or ""),str(data.get("project") or "KRISHNA"),str(data.get("operation") or "get"),data.get("payload") or {},data.get("auth_env")))
+            except KeyError:return self._json(404,{"error":"plugin not found"})
+            except (ValueError,PermissionError) as exc:return self._json(403 if isinstance(exc,PermissionError) else 400,{"error":str(exc)})
+            except Exception as exc:return self._json(502,{"error":f"plugin request failed: {type(exc).__name__}: {exc}"})
 
         if self.path == "/api/garuda/scout":
             project=str(data.get("project") or "KRISHNA").strip()
