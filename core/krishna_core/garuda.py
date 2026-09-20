@@ -115,6 +115,7 @@ class GarudaAgent:
             raise
         finally:
             if errors:self._set(last_error="; ".join(f"{k}: {v}" for k,v in errors.items()))
+            self._set(working=False,source=None)
         wanted=self._terms(goal)
         for r in repos:
             r["fit_terms"]=len(wanted & self._terms((r.get("full_name") or "")+" "+(r.get("description") or "")))
