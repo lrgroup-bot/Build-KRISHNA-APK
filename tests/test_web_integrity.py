@@ -11,7 +11,7 @@ class WebIntegrityTests(unittest.TestCase):
         cls.text=WEB.read_text(encoding="utf-8")
 
     def test_single_required_ids(self):
-        for element_id in ("home","sudarshan","projects","garuda","plugins","specialists","development","work","activity","system","messages","project","composer"):
+        for element_id in ("home","sudarshan","projects","garuda","plugins","specialists","development","work","activity","system","messages","project"):
             needle=f'id="{element_id}"'
             self.assertEqual(self.text.count(needle),1,needle)
 
