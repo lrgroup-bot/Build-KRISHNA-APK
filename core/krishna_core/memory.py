@@ -1,4 +1,4 @@
-import sqlite3, time, json
+import sqlite3, time, json, zlib, base64
 from threading import RLock
 from .config import settings
 
@@ -85,12 +85,40 @@ class MemoryStore:
             self.db.executescript(SCHEMA)
             self.db.commit()
 
+    @staticmethod
+    def _pack_gyan(value):
+        raw=json.dumps(value or [],ensure_ascii=False,separators=(",",":")).encode("utf-8")
+        if len(raw)<512:return raw.decode("utf-8")
+        return "zlib64:"+base64.b64encode(zlib.compress(raw,9)).decode("ascii")
+
+    @staticmethod
+    def _unpack_gyan(value):
+        if not value:return []
+        if value.startswith("zlib64:"):
+            return json.loads(zlib.decompress(base64.b64decode(value[7:])).decode("utf-8"))
+        return json.loads(value)
+
+    def compact_gyan_storage(self):
+        changed=before=after=0
+        with self.lock:
+            for table,key in (("learnings","id"),("gyan_pending","approval_id")):
+                rows=self.db.execute(f"SELECT {key},evidence FROM {table}").fetchall()
+                for ident,evidence in rows:
+                    if not evidence or evidence.startswith("zlib64:"):continue
+                    before+=len(evidence.encode("utf-8"))
+                    packed=self._pack_gyan(self._unpack_gyan(evidence))
+                    after+=len(packed.encode("utf-8"))
+                    if packed!=evidence:
+                        self.db.execute(f"UPDATE {table} SET evidence=? WHERE {key}=?",(packed,ident));changed+=1
+            self.db.commit()
+        return {"records_compacted":changed,"bytes_before":before,"bytes_after":after,"bytes_saved":max(0,before-after)}
+
     def create_gyan_pending(self, approval_id, project, topic, lesson, evidence=None, confidence=0.0, source="research", verified=False):
         now=time.time()
         with self.lock:
             self.db.execute(
                 "INSERT INTO gyan_pending(approval_id,project,topic,lesson,evidence,confidence,source,verified,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                (approval_id,project,topic,lesson,json.dumps(evidence or []),float(confidence or 0),source,1 if verified else 0,"pending",now),
+                (approval_id,project,topic,lesson,self._pack_gyan(evidence or []),float(confidence or 0),source,1 if verified else 0,"pending",now),
             )
             self.db.commit()
         return self.gyan_pending(approval_id)
@@ -99,7 +127,7 @@ class MemoryStore:
         with self.lock:
             r=self.db.execute("SELECT approval_id,project,topic,lesson,evidence,confidence,source,verified,status,created_at,decided_at FROM gyan_pending WHERE approval_id=?",(approval_id,)).fetchone()
         if not r:return None
-        return {"approval_id":r[0],"project":r[1],"topic":r[2],"lesson":r[3],"evidence":json.loads(r[4]),"confidence":r[5],"source":r[6],"verified":bool(r[7]),"status":r[8],"created_at":r[9],"decided_at":r[10]}
+        return {"approval_id":r[0],"project":r[1],"topic":r[2],"lesson":r[3],"evidence":self._unpack_gyan(r[4]),"confidence":r[5],"source":r[6],"verified":bool(r[7]),"status":r[8],"created_at":r[9],"decided_at":r[10]}
 
     def list_gyan_pending(self, project=None, status="pending", limit=100):
         with self.lock:
