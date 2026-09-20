@@ -201,6 +201,8 @@ class Handler(BaseHTTPRequestHandler):
             project=(query.get("project") or ["KRISHNA"])[0]
             try:return self._json(200,orch.model_pool(project))
             except KeyError:return self._json(404,{"error":"project not registered"})
+        if path == "/api/gyan-bhandar/archive/status":
+            return self._json(200,orch.gyan_archive_status())
         if path == "/api/gyan-bhandar/pending":
             project=(query.get("project") or [None])[0]
             try:return self._json(200,orch.gyan_pending(project,100))
@@ -705,6 +707,17 @@ class Handler(BaseHTTPRequestHandler):
             try:return self._json(200,orch.testing_lead_live_verify(str(data.get("project") or "KRISHNA"),str(data.get("url") or ""),data.get("screenshot_dir"),int(data.get("max_controls") or 100)))
             except (ValueError,KeyError,RuntimeError,TypeError) as exc:return self._json(400,{"error":str(exc)})
 
+        if self.path == "/api/gyan-bhandar/archive":
+            project=str(data.get("project") or "KRISHNA").strip(); source_path=str(data.get("source_path") or "").strip()
+            if not source_path:return self._json(400,{"error":"source_path is required"})
+            try:return self._json(201,orch.gyan_archive_file(project,source_path,str(data.get("topic") or ""),bool(data.get("remove_original",False))))
+            except KeyError:return self._json(404,{"error":"project not registered"})
+            except (ValueError,FileNotFoundError) as exc:return self._json(400,{"error":str(exc)})
+        if self.path == "/api/gyan-bhandar/archive/restore":
+            digest=str(data.get("sha256") or "").strip(); destination=str(data.get("destination") or "").strip()
+            if not digest or not destination:return self._json(400,{"error":"sha256 and destination are required"})
+            try:return self._json(200,orch.gyan_restore_file(digest,destination))
+            except (ValueError,FileNotFoundError) as exc:return self._json(400,{"error":str(exc)})
         if self.path == "/api/gyan-bhandar/compact":
             return self._json(200,orch.gyan_compact())
 
