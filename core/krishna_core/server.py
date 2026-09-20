@@ -513,6 +513,30 @@ class Handler(BaseHTTPRequestHandler):
             except KeyError:
                 return self._json(404, {"error": "project not registered"})
 
+        if self.path == "/api/chats/move":
+            chat_id = str(data.get("chat_id", "")).strip()
+            project = str(data.get("project", "")).strip()
+            if not chat_id or not project:
+                return self._json(400, {"error": "chat_id and project are required"})
+            try:
+                return self._json(200, orch.move_chat(chat_id, project))
+            except KeyError as exc:
+                return self._json(404, {"error": str(exc)})
+            except ValueError as exc:
+                return self._json(400, {"error": str(exc)})
+
+        if self.path == "/api/chats/rename":
+            chat_id = str(data.get("chat_id", "")).strip()
+            title = str(data.get("title", "")).strip()
+            if not chat_id or not title:
+                return self._json(400, {"error": "chat_id and title are required"})
+            try:
+                return self._json(200, orch.rename_chat(chat_id, title))
+            except KeyError as exc:
+                return self._json(404, {"error": str(exc)})
+            except ValueError as exc:
+                return self._json(400, {"error": str(exc)})
+
         if self.path == "/api/projects/register":
             try:
                 out = orch.register_project(
