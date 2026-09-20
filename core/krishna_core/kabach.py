@@ -94,6 +94,17 @@ class KabachAgent:
         self.memory.audit("kabach_security_research","completed",f"{project}:{len(safe)} web:{len(repos)} repos")
         return result
 
+    def protect_project(self,project,root):
+        checks=[]
+        for name in (".env",".git/config","requirements.txt","pyproject.toml","package.json","package-lock.json"):
+            p=Path(root)/name
+            if p.exists(): checks.append({"path":str(p),"verdict":self.inspect_path(p,root,False)})
+        return {"agent":"KABACH","project":project,"root":str(Path(root).resolve()),"checks":checks,"policy":{"egress":"default_deny","secrets":"never_transmit","project_scope":"enforced","external_content":"untrusted","security_research":"delegate_to_garuda"}}
+
+    def gate_external_evidence(self,text,source="external"):
+        verdict=self.inspect_text(text,source)
+        return {"allowed_as_data":True,"allowed_as_instruction":False,"secret_safe":verdict["allowed"],"verdict":verdict}
+
     def record(self,project,verdict,context=""):
         status="allowed" if verdict.get("allowed") else "blocked"
         self.memory.audit("kabach_"+context,status,json.dumps({"project":project,"verdict":verdict},default=str)[:12000])
