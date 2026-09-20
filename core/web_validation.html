@@ -137,6 +137,39 @@ body{font-size:clamp(12px,.78vw,15px)}
 @media(max-width:900px){.projectWorkspaceHead{align-items:flex-start;flex-direction:column}.projectbar{display:flex;flex-wrap:wrap}.projectBento,.projectChatList{grid-template-columns:1fr}}
 
 .gyanApproval{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:16px 18px;margin:0 0 14px;border-radius:18px;background:linear-gradient(145deg,rgba(31,49,64,.7),rgba(9,24,34,.52));border:1px solid rgba(229,189,103,.28);backdrop-filter:blur(22px)}.gyanApproval strong,.gyanApproval small{display:block}.gyanApproval strong{margin-top:5px}.gyanApproval small{margin-top:4px;color:var(--muted)}.approvalActions{display:flex;gap:8px}@media(max-width:800px){.gyanApproval{align-items:flex-start;flex-direction:column}}
+
+/* Sudarshan Spatial Work Console v6 — focused 100% viewport cleanup */
+:root{--rail:250px;--topbar:58px}
+#sudarshan{overflow:hidden}
+#sudarshan .panelInner{width:min(1540px,calc(100% - 32px));height:100%;padding:10px 0 118px}
+.sudarshanDeck{grid-template-columns:178px minmax(0,1fr) 184px;gap:12px;height:100%}
+.holoRail{margin-top:8px;max-height:calc(100dvh - 205px);border-radius:16px;scrollbar-width:thin;scrollbar-color:rgba(87,216,239,.24) transparent}
+.holoRail.left,.holoRail.right{transform:none}
+.holoPanel{padding:10px;border-radius:13px}
+.holoPanel .hv{font-size:12px}
+.sudarshanCenter{border-radius:22px;border-color:rgba(91,211,236,.12);overflow:hidden}
+#messages{padding:22px clamp(28px,5vw,76px) 118px;scrollbar-width:thin;scrollbar-color:rgba(87,216,239,.22) transparent}
+#messages::-webkit-scrollbar,.holoRail::-webkit-scrollbar,#recentChats::-webkit-scrollbar{width:6px}
+#messages::-webkit-scrollbar-track,.holoRail::-webkit-scrollbar-track,#recentChats::-webkit-scrollbar-track{background:transparent}
+#messages::-webkit-scrollbar-thumb,.holoRail::-webkit-scrollbar-thumb,#recentChats::-webkit-scrollbar-thumb{background:rgba(87,216,239,.22);border-radius:20px}
+.welcome{min-height:44vh;padding-top:0}
+.welcome .orb{width:54px;height:54px;font-size:23px}
+.welcome h1{font-size:clamp(30px,3.2vw,46px);max-width:620px;line-height:1.12;margin:18px auto 12px}
+.welcome p{font-size:13px}
+.composerWrap{left:var(--rail);padding:12px 24px 18px;background:linear-gradient(180deg,transparent,rgba(3,7,12,.94) 38%)}
+.composer{width:min(900px,calc(100% - 36px));border-radius:22px;padding:12px 14px}
+.composer textarea{min-height:56px;max-height:190px}
+.sudarshanBar{max-width:900px;margin:4px auto 0}
+#recentChats{max-height:170px;scrollbar-width:thin;scrollbar-color:rgba(87,216,239,.22) transparent}
+.chatRow{display:grid;grid-template-columns:minmax(0,1fr) 28px;align-items:center;gap:3px}
+.chatRow .chatOpen{min-width:0}
+.chatRow .chatMore{width:28px;height:28px;padding:0;border:0;background:transparent;color:#718092;opacity:.35;border-radius:8px;cursor:pointer}
+.chatRow:hover .chatMore{opacity:1;background:rgba(87,216,239,.07)}
+/* Chat-scoped actions belong inside Sudarshan, never in global top chrome. */
+body[data-view="home"] .chatScopedTop,body[data-view="projects"] .chatScopedTop,body[data-view="garuda"] .chatScopedTop,body[data-view="gyan"] .chatScopedTop{display:none!important}
+@media(max-width:1180px){.sudarshanDeck{grid-template-columns:160px minmax(0,1fr)}.holoRail.right{display:none}}
+@media(max-width:860px){:root{--rail:72px}.sudarshanDeck{grid-template-columns:1fr}.holoRail.left{display:none}.composerWrap{left:var(--rail)}}
+
 </style><script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
 </head><body><div class="app">
 <aside class="side"><div class="brand">KRISHNA<small>ALMIGHTY · LOCAL COMMAND CORE</small></div>
@@ -154,7 +187,7 @@ body{font-size:clamp(12px,.78vw,15px)}
 <div class="section chatSectionTitle"><span>PROJECT CHATS</span><button class="miniAdd" title="New chat in selected project" onclick="newChat()">＋</button></div><div id="chatProjectLabel" class="chatProjectLabel">KRISHNA</div><div id="recentChats" class="nav"></div>
 <div class="section">TOOLS</div><div class="nav"><button onclick="investigate()"><span class="ico">⌕</span><span class="txt">Investigate</span></button><button onclick="inspectUI()"><span class="ico">▣</span><span class="txt">Inspect UI</span></button><button onclick="research()"><span class="ico">⌁</span><span class="txt">Research</span></button></div>
 <div class="sideFoot"><div><span id="dot" class="statusDot"></span><span id="sideStatus" class="txt">Checking Core</span></div></div></aside>
-<main class="main"><div class="sceneGrid"></div><header class="top"><div class="crumb"><span id="modeBadge" style="color:var(--gold);margin-right:8px">KRISHNA</span><span id="pageTitle">Almighty Core</span> <span style="color:#596474">/</span> <span id="projectName">general</span></div><div class="topActions"><span id="contextBadge" class="pill">KRISHNA</span><button class="ghost" onclick="moveCurrentChat()">Move chat</button><button class="ghost danger" onclick="deleteCurrentChat()">Delete chat</button><button class="ghost" onclick="showView('plugins')">Plugins</button><span id="online" class="pill">CHECKING</span></div></header>
+<main class="main"><div class="sceneGrid"></div><header class="top"><div class="crumb"><span id="modeBadge" style="color:var(--gold);margin-right:8px">KRISHNA</span><span id="pageTitle">Almighty Core</span> <span style="color:#596474">/</span> <span id="projectName">general</span></div><div class="topActions"><span id="contextBadge" class="pill">KRISHNA</span><button class="ghost" onclick="moveCurrentChat()" class="chatScopedTop" style="display:none">Move chat</button><button class="ghost danger" onclick="deleteCurrentChat()" class="chatScopedTop" style="display:none">Delete chat</button><button class="ghost" onclick="showView('plugins')">Plugins</button><span id="online" class="pill">CHECKING</span></div></header>
 <select id="project" style="display:none"></select><section id="home" class="view active panelView"><div class="panelInner"><div class="holoStage"><div class="holoCore"><div class="holoRing r1"></div><div class="holoRing r2"></div><div class="holoRing r3"></div><div class="holoOrb"></div><div id="krishnaAvatar" class="krishnaAvatar"><model-viewer id="krishnaModel" src="/api/avatar.glb" alt="KRISHNA avatar" camera-controls disable-zoom autoplay shadow-intensity="1" interaction-prompt="none"></model-viewer></div><div class="holoNode n1">NEURAL ACTION GRAPH</div><div class="holoNode n2">SYSTEM OBSERVER</div><div class="holoNode n3">VERIFICATION GATE</div><div class="holoNode n4">SUDARSHAN ONLINE</div><div class="holoLabel"><strong>KRISHNA</strong><span>ALMIGHTY CORE</span></div></div></div><div style="text-align:center;margin:-20px 0 28px"><button class="primary" style="padding:12px 22px" onclick="showView('sudarshan');newChat()">ENTER SUDARSHAN ☸</button></div><div class="grid"><div class="card"><div class="k">ROLE</div><div class="v">Almighty Core</div></div><div class="card"><div class="k">WORKSPACE</div><div class="v">Sudarshan</div></div><div class="card"><div class="k">AUTHORITY</div><div class="v">Policy + Verification</div></div></div></div></section>
 <section id="sudarshan" class="view chatView">
 <div class="sudarshanBar"><span class="miniCore">☸</span><button class="ghost" onclick="newChat()">＋ New</button><button class="ghost" onclick="loadChats()">↻ Chats</button><button class="ghost" onclick="renameCurrentChat()">✎ Rename</button><button class="ghost" onclick="moveCurrentChat()">◇ Move</button><button class="ghost danger" onclick="deleteCurrentChat()">× Delete</button><button class="ghost" onclick="loadTasks()">▷ Work</button><span class="spacer"></span><span id="sudarshanState" class="workChip">READY</span></div>
