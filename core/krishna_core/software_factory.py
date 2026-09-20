@@ -53,10 +53,30 @@ class SoftwareFactory:
         record={"stage":stage,"passed":bool(passed),"evidence":evidence,"defects":defects,"next":nxt,"at":time.time()}
         self.memory.remember(project,"software_factory_gate",stage,record)
         return record
-    def hr_status(self,project,workers,deadline_at=None):
+    def test_plan(self,project_type="web",risk="medium",has_ui=True,has_api=True):
+        risk=str(risk).lower(); checks=["unit","regression"]
+        if has_api: checks+=["api","integration"]
+        if has_ui: checks+=["browser","manual_clickthrough","visual"]
+        if risk in {"high","critical"}: checks+=["security","rollback","recovery","performance"]
+        return {"project_type":project_type,"risk":risk,"mode":"both" if has_ui else "automated","checks":list(dict.fromkeys(checks)),"owner":"testing_manager","final_live_verifier":"testing_lead"}
+
+    def route_defect(self,defect):
+        text=str(defect or "").lower()
+        if any(x in text for x in ("security","secret","auth","permission","vulnerability")): return "system_engineering"
+        if any(x in text for x in ("test","flaky","fixture")): return "testing"
+        return "engineering"
+
+    def hr_status(self,project,workers,deadline_at=None,total_units=None,completed_units=None):
         now=time.time(); rows=[]
         for w in workers:
             started=float(w.get("assigned_at") or now); ended=float(w.get("ended_at") or now)
             rows.append({**w,"worked_seconds":max(0,ended-started)})
         remaining=None if not deadline_at else float(deadline_at)-now
-        return {"project":project,"workers":rows,"deadline_remaining_seconds":remaining,"deadline_risk":remaining is not None and remaining<0,"staffing_action":"request_scale_up" if remaining is not None and remaining<0 else "monitor"}
+        total=max(0,float(total_units or 0)); done=max(0,float(completed_units or 0))
+        progress=(done/total) if total else None; elapsed=sum(x["worked_seconds"] for x in rows)
+        rate=(done/elapsed) if done and elapsed else None
+        eta=((total-done)/rate) if rate and total>=done else None
+        risk=bool(remaining is not None and (remaining<0 or (eta is not None and eta>max(0,remaining))))
+        suggested=1
+        if remaining and remaining>0 and rate and total>done: suggested=max(1,int(((total-done)/(rate*remaining))+0.999))
+        return {"project":project,"workers":rows,"deadline_remaining_seconds":remaining,"progress":progress,"measured_rate_units_per_second":rate,"forecast_eta_seconds":eta,"deadline_risk":risk,"staffing_action":"request_scale_up" if risk else "monitor","suggested_worker_count":suggested,"measurement_policy":"actual timestamps and completed work only; never fabricate productivity"}
