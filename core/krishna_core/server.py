@@ -171,6 +171,8 @@ class Handler(BaseHTTPRequestHandler):
             if not body:
                 return self._json(404, {"error": "avatar asset unavailable"})
             return self._binary(200, body, "image/webp")
+        if path == "/api/garuda/status":
+            return self._json(200, orch.garuda_status())
         if path in ("/health", "/api/status"):
             return self._json(200, {
                 "ok": True,
