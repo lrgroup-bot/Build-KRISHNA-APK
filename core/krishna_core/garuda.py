@@ -1,5 +1,6 @@
 from __future__ import annotations
-import re, urllib.parse, urllib.request, xml.etree.ElementTree as ET
+import re, urllib.parse, urllib.request, xml.etree.ElementTree as ET, json, os, time
+from threading import RLock
 from dataclasses import dataclass, asdict
 from .content_guard import assess_untrusted_content
 
@@ -16,6 +17,44 @@ class GarudaAgent:
     """Read-only discovery scout. Garuda researches; KRISHNA decides and implements."""
     def __init__(self, github, memory):
         self.github=github; self.memory=memory
+        self._lock=RLock(); self._state={"working":False,"phase":"READY","source":None,"goal":None,"project":None,"started_at":None,"updated_at":time.time(),"found":0,"last_error":None}
+
+    def _set(self, **values):
+        with self._lock:
+            self._state.update(values); self._state["updated_at"]=time.time()
+
+    def status(self):
+        with self._lock:return dict(self._state)
+
+    @staticmethod
+    def _json_get(url):
+        req=urllib.request.Request(url,headers={"User-Agent":"KRISHNA-Garuda/1.0","Accept":"application/json"})
+        with urllib.request.urlopen(req,timeout=20) as r:return json.loads(r.read().decode("utf-8"))
+
+    def _arxiv(self, query, limit=10):
+        url="https://export.arxiv.org/api/query?search_query=all:"+urllib.parse.quote(query)+"&start=0&max_results="+str(max(1,min(int(limit),20)))
+        req=urllib.request.Request(url,headers={"User-Agent":"KRISHNA-Garuda/1.0"})
+        with urllib.request.urlopen(req,timeout=20) as r:root=ET.fromstring(r.read())
+        ns={"a":"http://www.w3.org/2005/Atom"}; out=[]; wanted=self._terms(query)
+        for e in root.findall("a:entry",ns):
+            title=" ".join((e.findtext("a:title",default="",namespaces=ns)).split()); summary=" ".join((e.findtext("a:summary",default="",namespaces=ns)).split())
+            link=e.findtext("a:id",default="",namespaces=ns); guard=assess_untrusted_content(title+"\n"+summary,link).as_dict()
+            out.append(WebCandidate(title[:240],link[:1500],summary[:1000],"arxiv",len(wanted & self._terms(title+" "+summary)),bool(guard["suspicious"])))
+        return out
+
+    def _npm(self, query, limit=10):
+        data=self._json_get("https://registry.npmjs.org/-/v1/search?size="+str(max(1,min(int(limit),20)))+"&text="+urllib.parse.quote(query)); out=[]; wanted=self._terms(query)
+        for row in data.get("objects",[]):
+            p=row.get("package") or {}; title=p.get("name") or ""; summary=p.get("description") or ""; link=(p.get("links") or {}).get("repository") or (p.get("links") or {}).get("npm") or ""
+            guard=assess_untrusted_content(title+"\n"+summary,link).as_dict(); out.append(WebCandidate(title[:240],link[:1500],summary[:1000],"npm",len(wanted & self._terms(title+" "+summary)),bool(guard["suspicious"])))
+        return out
+
+    def _hn(self, query, limit=10):
+        data=self._json_get("https://hn.algolia.com/api/v1/search?tags=story&hitsPerPage="+str(max(1,min(int(limit),20)))+"&query="+urllib.parse.quote(query)); out=[]; wanted=self._terms(query)
+        for row in data.get("hits",[]):
+            title=row.get("title") or ""; link=row.get("url") or ("https://news.ycombinator.com/item?id="+str(row.get("objectID") or "")); summary=title
+            guard=assess_untrusted_content(title,link).as_dict(); out.append(WebCandidate(title[:240],link[:1500],summary[:1000],"hackernews",len(wanted & self._terms(title)),bool(guard["suspicious"])))
+        return out
 
     @staticmethod
     def _terms(text):
@@ -39,11 +78,17 @@ class GarudaAgent:
     def scout(self, project, goal, limit=10):
         goal=str(goal or "").strip()
         if not goal: raise ValueError("Garuda requires a research goal")
-        web_error=None; github_error=None; web=[]; repos=[]
-        try:web=self._web(goal,limit)
-        except Exception as exc:web_error=f"{type(exc).__name__}: {exc}"
+        self._set(working=True,phase="TAKEOFF",source=None,goal=goal,project=project,started_at=time.time(),found=0,last_error=None)
+        errors={}; web=[]; repos=[]
+        for source,fn in (("public_web",self._web),("research_papers",self._arxiv),("npm_registry",self._npm),("technical_discussions",self._hn)):
+            self._set(phase="SCOUTING",source=source)
+            try:web.extend(fn(goal,limit))
+            except Exception as exc:errors[source]=f"{type(exc).__name__}: {exc}"
+            self._set(found=len(web)+len(repos))
+        self._set(phase="SCOUTING",source="github")
         try:repos=(self.github.search(goal,limit).get("candidates") or [])
-        except Exception as exc:github_error=f"{type(exc).__name__}: {exc}"
+        except Exception as exc:errors["github"]=f"{type(exc).__name__}: {exc}"
+        self._set(found=len(web)+len(repos))
         wanted=self._terms(goal)
         for r in repos:
             r["fit_terms"]=len(wanted & self._terms((r.get("full_name") or "")+" "+(r.get("description") or "")))
@@ -52,7 +97,9 @@ class GarudaAgent:
         report={
             "agent":"Garuda","role":"read_only_discovery","project":project,"goal":goal,
             "web":[asdict(x) for x in web],"github":repos,
-            "errors":{"web":web_error,"github":github_error},
+            "errors":errors,
+            "coverage":["public_web","github","research_papers","npm_registry","technical_discussions"],
+            "darkweb_policy":{"enabled":False,"reason":"No unrestricted dark-web crawling. Optional Tor research must be explicitly allowlisted to legitimate technical/research sources; illicit markets, stolen data, credentials and harmful services are excluded."},
             "handover":{
                 "to":"KRISHNA","decision_authority":"KRISHNA",
                 "auto_implementation":False,
@@ -60,5 +107,6 @@ class GarudaAgent:
             }
         }
         self.memory.remember(project,"garuda_research",goal,{"report":report})
-        self.memory.audit("garuda_scout","completed",f"{project}:{len(web)} web:{len(repos)} github")
+        self.memory.audit("garuda_scout","completed",f"{project}:{len(web)} discovery:{len(repos)} github")
+        self._set(working=False,phase="HANDED_TO_KRISHNA",source=None,found=len(web)+len(repos))
         return report
