@@ -181,6 +181,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200,{"attachments":_attachments.list(chat_id)})
         if path == "/api/garuda/status":
             return self._json(200, orch.garuda_status())
+        if path == "/api/gyan-bhandar":
+            project=(query.get("project") or ["KRISHNA"])[0].strip() or "KRISHNA"
+            topic=(query.get("topic") or [None])[0]
+            verified=str((query.get("verified") or ["0"])[0]).lower() in {"1","true","yes"}
+            try:return self._json(200,{"agent":"Gyan-Bhandar","project":project,"learnings":orch.gyan_recall(project,topic,100,verified)})
+            except KeyError:return self._json(404,{"error":"project not registered"})
         if path in ("/health", "/api/status"):
             return self._json(200, {
                 "ok": True,
@@ -627,6 +633,20 @@ class Handler(BaseHTTPRequestHandler):
             except KeyError:return self._json(404,{"error":"plugin not found"})
             except (ValueError,PermissionError) as exc:return self._json(403 if isinstance(exc,PermissionError) else 400,{"error":str(exc)})
             except Exception as exc:return self._json(502,{"error":f"plugin request failed: {type(exc).__name__}: {exc}"})
+
+        if self.path == "/api/gyan-bhandar/store":
+            project=str(data.get("project") or "KRISHNA").strip(); topic=str(data.get("topic") or "").strip(); lesson=str(data.get("lesson") or "").strip()
+            if not topic or not lesson:return self._json(400,{"error":"topic and lesson are required"})
+            try:return self._json(201,orch.gyan_store(project,topic,lesson,data.get("evidence") or [],float(data.get("confidence") or 0),str(data.get("source") or "sudarshan"),bool(data.get("verified",False))))
+            except KeyError:return self._json(404,{"error":"project not registered"})
+            except (ValueError,TypeError) as exc:return self._json(400,{"error":str(exc)})
+
+        if self.path == "/api/gyan-bhandar/strengthen":
+            project=str(data.get("project") or "KRISHNA").strip(); topic=str(data.get("topic") or "").strip()
+            if not topic:return self._json(400,{"error":"topic is required"})
+            try:return self._json(200,orch.gyan_strengthen(project,topic,bool(data.get("use_garuda",True)),int(data.get("limit") or 10)))
+            except KeyError:return self._json(404,{"error":"project not registered"})
+            except (ValueError,RuntimeError) as exc:return self._json(400,{"error":str(exc)})
 
         if self.path == "/api/garuda/scout":
             project=str(data.get("project") or "KRISHNA").strip()
