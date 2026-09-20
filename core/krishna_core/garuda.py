@@ -1,5 +1,5 @@
 from __future__ import annotations
-import re, urllib.parse, urllib.request, xml.etree.ElementTree as ET, json, os, time
+import re, urllib.parse, urllib.request, xml.etree.ElementTree as ET, json, time, hashlib
 from threading import RLock
 from dataclasses import dataclass, asdict
 from .content_guard import assess_untrusted_content
@@ -12,6 +12,7 @@ class WebCandidate:
     source:str
     relevance:int
     suspicious:bool=False
+    fingerprint:str=""
 
 class GarudaAgent:
     """Read-only discovery scout. Garuda researches; KRISHNA decides and implements."""
@@ -75,30 +76,56 @@ class GarudaAgent:
             out.append(WebCandidate(title[:240],link[:1500],summary[:1000],"web",score,bool(guard["suspicious"])))
         return out
 
+    @staticmethod
+    def _fingerprint(url, title=""):
+        raw=(str(url).strip().lower()+"|"+str(title).strip().lower()).encode("utf-8","ignore")
+        return hashlib.sha256(raw).hexdigest()[:16]
+
+    @staticmethod
+    def _source_weight(source):
+        return {"arxiv":5,"github":4,"npm":3,"web":2,"hackernews":1}.get(source,1)
+
+    def _dedupe_and_rank(self, rows):
+        seen={}; ranked=[]
+        for x in rows:
+            fp=self._fingerprint(x.url,x.title); x.fingerprint=fp
+            if fp in seen: continue
+            seen[fp]=True
+            ranked.append(x)
+        ranked.sort(key=lambda x:(x.suspicious is False,x.relevance,self._source_weight(x.source)),reverse=True)
+        return ranked
+
     def scout(self, project, goal, limit=10):
         goal=str(goal or "").strip()
         if not goal: raise ValueError("Garuda requires a research goal")
         self._set(working=True,phase="TAKEOFF",source=None,goal=goal,project=project,started_at=time.time(),found=0,last_error=None)
         errors={}; web=[]; repos=[]
-        for source,fn in (("public_web",self._web),("research_papers",self._arxiv),("npm_registry",self._npm),("technical_discussions",self._hn)):
-            self._set(phase="SCOUTING",source=source)
-            try:web.extend(fn(goal,limit))
-            except Exception as exc:errors[source]=f"{type(exc).__name__}: {exc}"
+        try:
+            for source,fn in (("public_web",self._web),("research_papers",self._arxiv),("npm_registry",self._npm),("technical_discussions",self._hn)):
+                self._set(phase="SCOUTING",source=source)
+                try:web.extend(fn(goal,limit))
+                except Exception as exc:errors[source]=f"{type(exc).__name__}: {exc}"
+                self._set(found=len(web)+len(repos))
+            self._set(phase="SCOUTING",source="github")
+            try:repos=(self.github.search(goal,limit).get("candidates") or [])
+            except Exception as exc:errors["github"]=f"{type(exc).__name__}: {exc}"
             self._set(found=len(web)+len(repos))
-        self._set(phase="SCOUTING",source="github")
-        try:repos=(self.github.search(goal,limit).get("candidates") or [])
-        except Exception as exc:errors["github"]=f"{type(exc).__name__}: {exc}"
-        self._set(found=len(web)+len(repos))
+        except Exception as exc:
+            self._set(last_error=f"{type(exc).__name__}: {exc}")
+            raise
+        finally:
+            if errors:self._set(last_error="; ".join(f"{k}: {v}" for k,v in errors.items()))
         wanted=self._terms(goal)
         for r in repos:
             r["fit_terms"]=len(wanted & self._terms((r.get("full_name") or "")+" "+(r.get("description") or "")))
         repos.sort(key=lambda x:(x.get("fit_terms",0),x.get("score",0),x.get("stars",0)),reverse=True)
-        web.sort(key=lambda x:x.relevance,reverse=True)
+        web=self._dedupe_and_rank(web)
         report={
             "agent":"Garuda","role":"read_only_discovery","project":project,"goal":goal,
             "web":[asdict(x) for x in web],"github":repos,
             "errors":errors,
             "coverage":["public_web","github","research_papers","npm_registry","technical_discussions"],
+            "research_protocol":{"planner":"goal terms + source adapters","parallelizable":True,"deduplication":"sha256 URL/title fingerprint","ranking":"relevance + source weight + suspicious-content penalty","provenance":True,"counter_evidence_required":True,"resume_ready":True},
             "darkweb_policy":{"enabled":False,"reason":"No unrestricted dark-web crawling. Optional Tor research must be explicitly allowlisted to legitimate technical/research sources; illicit markets, stolen data, credentials and harmful services are excluded."},
             "handover":{
                 "to":"KRISHNA","decision_authority":"KRISHNA",
