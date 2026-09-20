@@ -206,6 +206,15 @@ class MemoryStore:
             self.db.commit()
         return self.chat(chat_id)
 
+    def delete_chat(self, chat_id):
+        with self.lock:
+            if not self.db.execute("SELECT 1 FROM chats WHERE chat_id=? AND active=1", (chat_id,)).fetchone():
+                raise KeyError(chat_id)
+            now = time.time()
+            self.db.execute("UPDATE chats SET active=0,updated_at=? WHERE chat_id=?", (now, chat_id))
+            self.db.commit()
+        return {"chat_id": chat_id, "deleted": True, "updated_at": now}
+
     def add_chat_message(self, chat_id, role, content, metadata=None):
         if role not in {"user", "assistant", "system", "tool"}:
             raise ValueError("invalid chat role")
