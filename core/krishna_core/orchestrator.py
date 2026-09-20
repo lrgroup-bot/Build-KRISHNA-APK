@@ -312,7 +312,18 @@ class Orchestrator:
         return self.ephemeral_workers.status()
 
     def software_project_gate(self,project,stage,passed,evidence=None,defects=None):
-        return self.software_factory.gate(project,stage,passed,evidence,defects)
+        result=self.software_factory.gate(project,stage,passed,evidence,defects)
+        if not passed and defects:
+            result["defect_routes"]=[{"defect":d,"team":self.software_factory.route_defect(d)} for d in defects]
+        if passed and stage in {"testing_lead","project_manager","handover"}:
+            self.gyan_bhandar.store(project,"software_factory:"+stage,"Verified factory gate passed",evidence or [],1.0,"software_factory",True)
+        return result
+
+    def software_factory_hr(self,project,workers,deadline_at=None,total_units=None,completed_units=None):
+        return self.software_factory.hr_status(project,workers,deadline_at,total_units,completed_units)
+
+    def software_factory_test_plan(self,project_type="web",risk="medium",has_ui=True,has_api=True):
+        return self.software_factory.test_plan(project_type,risk,has_ui,has_api)
 
     def resume_unfinished_work(self, project=None):
         unfinished=self.commitments.list(project,True,500)
