@@ -602,6 +602,26 @@ class Handler(BaseHTTPRequestHandler):
                 mark("INVESTIGATION ERROR", str(exc)[:160])
                 return self._json(500, {"error": str(exc)})
 
+        if self.path == "/api/development/sync":
+            project=str(data.get("project","")).strip()
+            if not project:return self._json(400,{"error":"project is required"})
+            try:return self._json(200,orch.development_sync(project))
+            except KeyError:return self._json(404,{"error":"project not registered"})
+
+        if self.path == "/api/development/stage":
+            project=str(data.get("project","")).strip(); files=data.get("files") or []
+            if not project or not isinstance(files,list):return self._json(400,{"error":"project and files are required"})
+            try:return self._json(200,orch.development_stage(project,files))
+            except KeyError:return self._json(404,{"error":"project not registered"})
+            except (ValueError,OSError) as exc:return self._json(400,{"error":str(exc)})
+
+        if self.path == "/api/development/verify":
+            project=str(data.get("project","")).strip(); candidate=str(data.get("candidate_root","")).strip()
+            if not project or not candidate:return self._json(400,{"error":"project and candidate_root are required"})
+            try:return self._json(200,orch.development_verify(project,candidate,data.get("checks") or [],data.get("frontend_url")))
+            except KeyError:return self._json(404,{"error":"project not registered"})
+            except (ValueError,OSError,RuntimeError) as exc:return self._json(400,{"error":str(exc)})
+
         if self.path == "/api/work/run":
             project = str(data.get("project", "")).strip()
             goal = str(data.get("goal", "")).strip()
