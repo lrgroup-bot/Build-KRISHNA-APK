@@ -765,6 +765,11 @@ Evidence:
         self.memory.audit("chat_rename", "completed", chat_id)
         return item
 
+    def delete_chat(self, chat_id):
+        item = self.memory.delete_chat(chat_id)
+        self.memory.audit("chat_delete", "completed", chat_id)
+        return item
+
     def ingest_knowledge(self, project, source, text, metadata=None):
         trust = assess_untrusted_content(text, source)
         merged_metadata = dict(metadata or {})
