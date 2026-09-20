@@ -566,6 +566,15 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 return self._json(400, {"error": str(exc)})
 
+        if self.path == "/api/chats/delete":
+            chat_id = str(data.get("chat_id", "")).strip()
+            if not chat_id:
+                return self._json(400, {"error": "chat_id is required"})
+            try:
+                return self._json(200, orch.delete_chat(chat_id))
+            except KeyError as exc:
+                return self._json(404, {"error": str(exc)})
+
         if self.path == "/api/chats/rename":
             chat_id = str(data.get("chat_id", "")).strip()
             title = str(data.get("title", "")).strip()
