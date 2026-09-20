@@ -183,6 +183,29 @@ class MemoryStore:
                 return None
             return {"chat_id": row[0], "project": row[1], "title": row[2], "created_at": row[3], "updated_at": row[4]}
 
+    def move_chat(self, chat_id, project):
+        project = str(project or "").strip()
+        if not project:
+            raise ValueError("project is required")
+        with self.lock:
+            row = self.db.execute("SELECT project FROM chats WHERE chat_id=? AND active=1", (chat_id,)).fetchone()
+            if not row:
+                raise KeyError(chat_id)
+            self.db.execute("UPDATE chats SET project=?,updated_at=? WHERE chat_id=?", (project, time.time(), chat_id))
+            self.db.commit()
+        return self.chat(chat_id)
+
+    def rename_chat(self, chat_id, title):
+        title = str(title or "").strip()[:160]
+        if not title:
+            raise ValueError("title is required")
+        with self.lock:
+            if not self.db.execute("SELECT 1 FROM chats WHERE chat_id=? AND active=1", (chat_id,)).fetchone():
+                raise KeyError(chat_id)
+            self.db.execute("UPDATE chats SET title=?,updated_at=? WHERE chat_id=?", (title, time.time(), chat_id))
+            self.db.commit()
+        return self.chat(chat_id)
+
     def add_chat_message(self, chat_id, role, content, metadata=None):
         if role not in {"user", "assistant", "system", "tool"}:
             raise ValueError("invalid chat role")
