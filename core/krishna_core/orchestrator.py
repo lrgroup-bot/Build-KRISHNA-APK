@@ -35,6 +35,7 @@ from .garuda import GarudaAgent
 from .gyan_bhandar import GyanBhandarAgent
 from .kabach import KabachAgent
 from .commitment_ledger import CommitmentLedger
+from .software_factory import SoftwareFactory
 
 
 class Orchestrator:
@@ -43,6 +44,7 @@ class Orchestrator:
         self.memory = MemoryStore(self.db_path)
         self.task_ledger = TaskLedger(self.db_path)
         self.commitments = CommitmentLedger(self.db_path)
+        self.software_factory = SoftwareFactory(self.memory,self.commitments)
         self.project_brain = ProjectBrain(self.memory)
         self.router = ModelRouter()
         self.graph = ProjectGraph()
@@ -290,6 +292,13 @@ class Orchestrator:
     def gyan_strengthen(self, project, topic, use_garuda=True, limit=10):
         if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
         return self.gyan_bhandar.strengthen(project,topic,use_garuda,limit)
+
+    def create_software_project_team(self,project,goal,deadline_hours=None):
+        if project!="KRISHNA" and not self.projects.get(project):raise KeyError(project)
+        return self.software_factory.plan(project,goal,deadline_hours)
+
+    def software_project_gate(self,project,stage,passed,evidence=None,defects=None):
+        return self.software_factory.gate(project,stage,passed,evidence,defects)
 
     def resume_unfinished_work(self, project=None):
         unfinished=self.commitments.list(project,True,500)
