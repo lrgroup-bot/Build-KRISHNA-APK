@@ -186,6 +186,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200,{"attachments":_attachments.list(chat_id)})
         if path == "/api/garuda/status":
             return self._json(200, orch.garuda_status())
+        if path == "/api/gyan-bhandar/theory":
+            project=(query.get("project") or ["KRISHNA"])[0].strip() or "KRISHNA"; topic=(query.get("topic") or [""])[0].strip()
+            if not topic:return self._json(400,{"error":"topic is required"})
+            try:return self._json(200,orch.gyan_theory(project,topic,25))
+            except KeyError:return self._json(404,{"error":"project not registered"})
         if path == "/api/gyan-bhandar":
             project=(query.get("project") or ["KRISHNA"])[0].strip() or "KRISHNA"
             topic=(query.get("topic") or [None])[0]
