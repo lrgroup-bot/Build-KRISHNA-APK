@@ -602,6 +602,14 @@ class Handler(BaseHTTPRequestHandler):
                 mark("INVESTIGATION ERROR", str(exc)[:160])
                 return self._json(500, {"error": str(exc)})
 
+        if self.path == "/api/garuda/scout":
+            project=str(data.get("project") or "KRISHNA").strip()
+            goal=str(data.get("goal") or "").strip()
+            if not goal:return self._json(400,{"error":"goal is required"})
+            try:return self._json(200,orch.garuda_scout(project,goal,int(data.get("limit") or 10)))
+            except KeyError:return self._json(404,{"error":"project not registered"})
+            except (ValueError,RuntimeError) as exc:return self._json(400,{"error":str(exc)})
+
         if self.path == "/api/development/git/status":
             project=str(data.get("project","")).strip()
             if not project:return self._json(400,{"error":"project is required"})
