@@ -36,6 +36,7 @@ from .gyan_bhandar import GyanBhandarAgent
 from .kabach import KabachAgent
 from .commitment_ledger import CommitmentLedger
 from .software_factory import SoftwareFactory
+from .ephemeral_workers import EphemeralWorkerRuntime
 
 
 class Orchestrator:
@@ -82,6 +83,7 @@ class Orchestrator:
         self.garuda = GarudaAgent(self.research, self.memory)
         self.gyan_bhandar = GyanBhandarAgent(self.memory, self.garuda)
         self.kabach = KabachAgent(self.memory)
+        self.ephemeral_workers = EphemeralWorkerRuntime(self.router,self.memory,self.kabach)
         self.goal_evaluator = GoalEvaluator()
         self._verification_checks = {}
         self.repair_agent = RepairAgent(
@@ -300,6 +302,14 @@ class Orchestrator:
     def request_ephemeral_workers(self,project,manager,role,count,reason,hr_snapshot=None,approve=False):
         if project!="KRISHNA" and not self.projects.get(project):raise KeyError(project)
         return self.software_factory.worker_request(project,manager,role,count,reason,hr_snapshot or {},bool(approve))
+
+    def run_ephemeral_workers(self,project,request,task):
+        policy=self.projects.get(project) if project!="KRISHNA" else None
+        privacy=policy.privacy if policy else "approved_cloud"
+        return self.ephemeral_workers.execute(project,request,task,privacy)
+
+    def ephemeral_worker_status(self):
+        return self.ephemeral_workers.status()
 
     def software_project_gate(self,project,stage,passed,evidence=None,defects=None):
         return self.software_factory.gate(project,stage,passed,evidence,defects)
