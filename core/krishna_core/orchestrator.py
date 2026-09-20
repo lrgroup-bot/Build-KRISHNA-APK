@@ -294,6 +294,9 @@ class Orchestrator:
     def gyan_decide(self, approval_id, approved):
         return self.gyan_bhandar.decide(approval_id,bool(approved))
 
+    def gyan_compact(self):
+        return self.gyan_bhandar.compact_storage()
+
     def gyan_recall(self, project, topic=None, limit=50, verified_only=False):
         if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
         return self.gyan_bhandar.recall(project,topic,limit,verified_only)
