@@ -11,8 +11,12 @@ class SoftwareFactory:
     STAGES=("engineering","lead_review","coding_manager","testing","testing_lead","project_manager","handover")
     def __init__(self,memory,commitments=None):
         self.memory=memory;self.commitments=commitments
-    def plan(self,project,goal,deadline_hours=None):
+    def plan(self,project,goal,deadline_hours=None,start_at=None,end_at=None):
         now=time.time(); pid=str(uuid.uuid4())
+        start=float(start_at or now)
+        if end_at is not None:
+            deadline_hours=max(0.0,(float(end_at)-start)/3600.0)
+        deadline_at=None if deadline_hours is None else start+float(deadline_hours)*3600
         teams={
           "engineering":[Worker("frontend_developer","engineering","GUI/UX/browser"),Worker("backend_developer","engineering","backend/API/integration")],
           "lead_review":[Worker("engineering_lead","lead","code+GUI review")],
@@ -26,11 +30,18 @@ class SoftwareFactory:
         target=None
         if deadline_hours:
             # internal target leaves a 1/6 delivery buffer; e.g. 72h -> 60h (2.5 days)
-            target=now+float(deadline_hours)*(5/6)*3600
-        result={"factory_id":pid,"project":project,"goal":goal,"stages":self.STAGES,"teams":{k:[vars(x) for x in v] for k,v in teams.items()},"deadline_hours":deadline_hours,"internal_target_at":target,"rules":{"failed_gate":"return_to_responsible_team","coding_manager":"may_scale_coder_workers","test_manager":"chooses automated/manual/both based on project risk and interfaces","testing_lead":"live click-through and result verification; defects return to engineering unless safely repairable within assigned scope","project_manager":"final acceptance","hr":"tracks real measured work and deadline risk; may request more workers","system_engineering":"handles approved additions/change requests","authority":"KRISHNA"}}
+            target=start+float(deadline_hours)*(5/6)*3600
+        result={"factory_id":pid,"project":project,"goal":goal,"stages":self.STAGES,"teams":{k:[vars(x) for x in v] for k,v in teams.items()},"deadline_hours":deadline_hours,"start_at":start,"deadline_at":deadline_at,"internal_target_at":target,"rules":{"failed_gate":"return_to_responsible_team","coding_manager":"requests ephemeral coder workers from KRISHNA; cannot spawn directly","test_manager":"chooses automated/manual/both and requests ephemeral tester workers from KRISHNA; cannot spawn directly","testing_lead":"live click-through and result verification; defects return to engineering unless safely repairable within assigned scope","project_manager":"final acceptance","hr":"owns timeline calculation and measured workload; advises managers how many workers/time remain; managers request workers from KRISHNA","system_engineering":"handles approved additions/change requests","authority":"KRISHNA"}}
         if self.commitments:self.commitments.add(project,"Deliver project through Software Factory",result,"KRISHNA","planned")
         self.memory.remember(project,"software_factory_plan",goal,result)
         return result
+    def worker_request(self,project,manager,role,count,reason,hr_snapshot,approved_by_krishna=False):
+        count=max(0,int(count)); manager=str(manager or "").strip()
+        if count<1:raise ValueError("worker count must be positive")
+        req={"request_id":str(uuid.uuid4()),"project":project,"manager":manager,"role":role,"requested_count":count,"reason":reason,"hr_snapshot":hr_snapshot or {},"approved_by":"KRISHNA" if approved_by_krishna else None,"status":"approved" if approved_by_krishna else "waiting_krishna_approval","ephemeral":True,"created_at":time.time()}
+        self.memory.remember(project,"ephemeral_worker_request",reason,req)
+        return req
+
     def gate(self,project,stage,passed,evidence=None,defects=None):
         if stage not in self.STAGES:raise ValueError("invalid stage")
         evidence=evidence or []; defects=defects or []
