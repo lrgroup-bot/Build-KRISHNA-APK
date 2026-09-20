@@ -283,6 +283,17 @@ class Orchestrator:
         if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
         return self.gyan_bhandar.store(project,topic,lesson,evidence,confidence,source,verified)
 
+    def gyan_propose(self, project, topic, lesson, evidence=None, confidence=0.0, source="research", verified=False):
+        if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
+        return self.gyan_bhandar.propose(project,topic,lesson,evidence,confidence,source,verified)
+
+    def gyan_pending(self, project=None, limit=100):
+        if project and project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
+        return {"agent":"Gyan-Bhandar","pending":self.gyan_bhandar.pending(project,limit)}
+
+    def gyan_decide(self, approval_id, approved):
+        return self.gyan_bhandar.decide(approval_id,bool(approved))
+
     def gyan_recall(self, project, topic=None, limit=50, verified_only=False):
         if project != "KRISHNA" and not self.projects.get(project): raise KeyError(project)
         return self.gyan_bhandar.recall(project,topic,limit,verified_only)
