@@ -68,6 +68,32 @@ class KabachAgent:
         data={"kind":"tool","tool":tool,"operation":operation,"evidence":evidence}
         return KabachVerdict(not blocked,"allow" if not blocked else "block","policy satisfied" if not blocked else "tool policy violation","low" if not blocked else "high",tuple(evidence),self._receipt(data)).as_dict()
 
+    def protect_project(self, project, root, privacy="local_only"):
+        rootv=self.inspect_path(root,root,write=False)
+        controls={"project":project,"root":str(Path(root).resolve()),"privacy":privacy,"protected":rootv["allowed"],
+            "controls":["secret_scan","path_scope","egress_default_deny","tool_permission_gate","audit_receipts","untrusted_content_boundary"],
+            "internet_research_owner":"Garuda","decision_authority":"KRISHNA"}
+        self.memory.remember(project,"kabach_security_profile","project protection profile",controls)
+        self.memory.audit("kabach_project_protection","enabled" if controls["protected"] else "blocked",json.dumps(controls))
+        return controls
+
+    def research_security(self, project, question, garuda, limit=10):
+        question=str(question or "").strip()
+        if not question: raise ValueError("security research question is required")
+        report=garuda.scout(project,"cybersecurity defensive research "+question,limit)
+        safe=[]
+        for row in (report.get("web") or []):
+            if not row.get("suspicious"): safe.append(row)
+        repos=[]
+        for row in (report.get("github") or []):
+            repos.append(row)
+        result={"agent":"KABACH","project":project,"question":question,"garuda_report":report,
+            "defensive_evidence":safe,"repository_candidates":repos,
+            "policy":{"purpose":"defensive_security_only","auto_execute_external_code":False,"auto_install":False,"decision_authority":"KRISHNA","implementation_executor":"Sudarshan"}}
+        self.memory.remember(project,"kabach_security_research",question,{"result":result})
+        self.memory.audit("kabach_security_research","completed",f"{project}:{len(safe)} web:{len(repos)} repos")
+        return result
+
     def record(self,project,verdict,context=""):
         status="allowed" if verdict.get("allowed") else "blocked"
         self.memory.audit("kabach_"+context,status,json.dumps({"project":project,"verdict":verdict},default=str)[:12000])
