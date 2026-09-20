@@ -1,7 +1,7 @@
 from __future__ import annotations
 from collections import Counter
 from urllib.parse import urlparse
-import re, time
+import re, time, uuid
 
 class GyanBhandarAgent:
     """Evidence-backed knowledge curator. Stores and strengthens theory; KRISHNA remains decision authority."""
@@ -16,6 +16,28 @@ class GyanBhandarAgent:
         item=self.memory.learn(project,topic,lesson,evidence or [],confidence,source,verified)
         self.memory.audit("gyan_bhandar_store","verified" if verified else "candidate",f"{project}:{item['fingerprint']}")
         return item
+
+    def propose(self, project, topic, lesson, evidence=None, confidence=0.0, source="research", verified=False):
+        approval_id=str(uuid.uuid4())
+        item=self.memory.create_gyan_pending(approval_id,project,topic,lesson,evidence or [],confidence,source,verified)
+        self.memory.audit("gyan_bhandar_proposal","waiting_approval",f"{project}:{approval_id}:{topic}")
+        return {**item,"stored":False,"requires_user_approval":True,
+            "question":"Save these findings to Gyan-Bhandar?"}
+
+    def pending(self, project=None, limit=100):
+        return self.memory.list_gyan_pending(project,"pending",limit)
+
+    def decide(self, approval_id, approved):
+        item=self.memory.gyan_pending(approval_id)
+        if not item or item.get("status")!="pending":raise KeyError(approval_id)
+        if not approved:
+            out=self.memory.decide_gyan_pending(approval_id,"rejected")
+            self.memory.audit("gyan_bhandar_proposal","rejected",approval_id)
+            return {**out,"stored":False}
+        stored=self.store(item["project"],item["topic"],item["lesson"],item["evidence"],item["confidence"],item["source"],item["verified"])
+        out=self.memory.decide_gyan_pending(approval_id,"approved")
+        self.memory.audit("gyan_bhandar_proposal","approved",approval_id)
+        return {**out,"stored":True,"learning":stored}
 
     def recall(self, project, topic=None, limit=50, verified_only=False):
         rows=self.memory.learnings(project,limit,verified_only)
