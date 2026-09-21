@@ -1,0 +1,28 @@
+# Python generated artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environments
+.venv/
+venv/
+env/
+
+# KRISHNA runtime state (never source-controlled)
+.krishna_state/
+logs/
+backups/
+*.db
+*.db-wal
+*.db-shm
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
